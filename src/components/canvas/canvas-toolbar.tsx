@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
+  Check,
+  ChevronDown,
   Filter,
   LayoutGrid,
   RefreshCw,
@@ -9,12 +12,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { CanvasNodeKind, CanvasNodeStatus } from "@/lib/canvas/types";
 
@@ -56,6 +53,103 @@ const statusOptions: CanvasStatusFilter[] = [
   "failed",
 ];
 
+function ToolbarDropdown<T extends string>({
+  value,
+  options,
+  className,
+  onChange,
+}: {
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  className?: string;
+  onChange: (value: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className={cn("relative", className)}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          "flex h-8 w-full items-center justify-between gap-2 rounded-lg border px-2.5 text-left text-[13px] font-medium outline-none transition-all",
+          "border-[var(--border-subtle)] bg-[var(--panel)] text-[var(--text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+          "hover:border-[var(--border-hover)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
+          "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
+          open && "border-primary/55 bg-[var(--surface-hover)] text-[var(--text-primary)] ring-2 ring-primary/15",
+        )}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="truncate">{selected.label}</span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] transition-transform",
+            open && "rotate-180 text-primary",
+          )}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-[calc(100%+6px)] z-50 w-full min-w-[150px] overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--panel)] p-1 shadow-2xl shadow-black/45 ring-1 ring-white/[0.04]"
+        >
+          {options.map((option) => {
+            const active = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={cn(
+                  "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors",
+                  active
+                    ? "bg-primary/12 text-primary"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
+                )}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                  {active && <Check className="h-3.5 w-3.5" />}
+                </span>
+                <span className="truncate">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CanvasToolbar({
   kindFilter,
   statusFilter,
@@ -72,6 +166,19 @@ export function CanvasToolbar({
   onSave,
 }: CanvasToolbarProps) {
   const t = useTranslations("project.canvas");
+  const kindItems = kindOptions.map((kind) => ({
+    value: kind,
+    label: kind === "all" ? t("filters.allKinds") : t(`kinds.${kind}`),
+  }));
+  const statusItems = statusOptions.map((status) => ({
+    value: status,
+    label: status === "all" ? t("filters.allStatuses") : t(`statuses.${status}`),
+  }));
+  const ratioItems = [
+    { value: "16:9", label: "16:9" },
+    { value: "9:16", label: "9:16" },
+    { value: "1:1", label: "1:1" },
+  ];
 
   return (
     <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[--border-subtle] bg-white px-3 py-2 lg:px-4">
@@ -89,34 +196,24 @@ export function CanvasToolbar({
 
       <div className="flex items-center gap-2">
         <Filter className="h-4 w-4 text-[--text-muted]" />
-        <Select value={kindFilter} onValueChange={(value) => onKindFilterChange(value as CanvasKindFilter)}>
-          <SelectTrigger size="sm" className="w-[120px]" />
-          <SelectContent>
-            {kindOptions.map((kind) => (
-              <SelectItem key={kind} value={kind}>
-                {kind === "all" ? t("filters.allKinds") : t(`kinds.${kind}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={(value) => onStatusFilterChange(value as CanvasStatusFilter)}>
-          <SelectTrigger size="sm" className="w-[120px]" />
-          <SelectContent>
-            {statusOptions.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status === "all" ? t("filters.allStatuses") : t(`statuses.${status}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={ratio} onValueChange={onRatioChange}>
-          <SelectTrigger size="sm" className="w-[88px]" />
-          <SelectContent>
-            <SelectItem value="16:9">16:9</SelectItem>
-            <SelectItem value="9:16">9:16</SelectItem>
-            <SelectItem value="1:1">1:1</SelectItem>
-          </SelectContent>
-        </Select>
+        <ToolbarDropdown
+          value={kindFilter}
+          options={kindItems}
+          onChange={onKindFilterChange}
+          className="w-[132px]"
+        />
+        <ToolbarDropdown
+          value={statusFilter}
+          options={statusItems}
+          onChange={onStatusFilterChange}
+          className="w-[132px]"
+        />
+        <ToolbarDropdown
+          value={ratio}
+          options={ratioItems}
+          onChange={onRatioChange}
+          className="w-[90px]"
+        />
       </div>
 
       <label className="flex h-8 items-center gap-2 rounded-lg border border-[--border-subtle] px-2 text-xs text-[--text-secondary]">
