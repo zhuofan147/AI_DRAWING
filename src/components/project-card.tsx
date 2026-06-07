@@ -5,7 +5,15 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Clock, Sparkles, CircleCheck, FileText, Trash2 } from "lucide-react";
+import {
+  ArrowUpRight,
+  CircleCheck,
+  Clock,
+  FileText,
+  Network,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,9 +54,12 @@ const statusConfig: Record<string, { dot: string; text: string; bg: string }> = 
 export function ProjectCard({ id, title, status, createdAt }: ProjectCardProps) {
   const t = useTranslations("dashboard");
   const tc = useTranslations("common");
+  const tp = useTranslations("project");
   const locale = useLocale();
   const router = useRouter();
   const config = statusConfig[status] || statusConfig.draft;
+  const episodesHref = `/${locale}/project/${id}/episodes`;
+  const canvasHref = `/${locale}/project/${id}/canvas`;
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -68,12 +79,10 @@ export function ProjectCard({ id, title, status, createdAt }: ProjectCardProps) 
 
   return (
     <>
-      <Link href={`/${locale}/project/${id}/episodes`} className="group block">
-        <div className="relative flex flex-col rounded-xl border border-[--border-subtle] bg-white p-4 transition-all duration-200 hover:border-[--border-hover] hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+      <article className="group relative flex flex-col rounded-xl border border-[--border-subtle] bg-white p-4 transition-all duration-200 hover:border-[--border-hover] hover:shadow-[0_14px_34px_rgba(0,0,0,0.24)]">
           {/* Delete button — top right */}
           <button
             onClick={(e) => {
-              e.preventDefault();
               e.stopPropagation();
               setDeleteOpen(true);
             }}
@@ -83,42 +92,57 @@ export function ProjectCard({ id, title, status, createdAt }: ProjectCardProps) 
             <Trash2 className="h-3.5 w-3.5" />
           </button>
 
-          {/* Icon + Title */}
-          <div className="flex items-start gap-3">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-              {status === "completed" ? (
-                <CircleCheck className="h-4 w-4" />
-              ) : status === "processing" ? (
-                <Sparkles className="h-4 w-4" />
-              ) : (
-                <FileText className="h-4 w-4" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1 pr-6">
-              <h3 className="font-display text-sm font-semibold leading-snug text-[--text-primary] truncate">
-                {title}
-              </h3>
-              <div className="mt-1 flex items-center gap-1 text-[11px] text-[--text-muted]">
-                <Clock className="h-3 w-3" />
-                <span>{new Date(createdAt).toLocaleDateString(locale, { year: "numeric", month: "numeric", day: "numeric" })}</span>
+          <Link href={episodesHref} className="block">
+            {/* Icon + Title */}
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                {status === "completed" ? (
+                  <CircleCheck className="h-4 w-4" />
+                ) : status === "processing" ? (
+                  <Sparkles className="h-4 w-4" />
+                ) : (
+                  <FileText className="h-4 w-4" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1 pr-6">
+                <h3 className="truncate font-display text-sm font-semibold leading-snug text-[--text-primary]">
+                  {title}
+                </h3>
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-[--text-muted]">
+                  <Clock className="h-3 w-3" />
+                  <span>{new Date(createdAt).toLocaleDateString(locale, { year: "numeric", month: "numeric", day: "numeric" })}</span>
+                </div>
               </div>
             </div>
-          </div>
+          </Link>
 
-          {/* Footer: status + arrow */}
-          <div className="mt-4 flex items-center justify-between border-t border-[--border-subtle] pt-3">
+          {/* Footer: status + quick jumps */}
+          <div className="mt-4 flex items-center justify-between gap-2 border-t border-[--border-subtle] pt-3">
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${config.bg} ${config.text}`}
+              className={`inline-flex min-w-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${config.bg} ${config.text}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />
               {t(`projectStatus.${status}` as "projectStatus.draft" | "projectStatus.processing" | "projectStatus.completed")}
             </span>
-            <div className="flex h-6 w-6 items-center justify-center rounded-full text-[--text-muted] transition-all duration-200 group-hover:bg-primary group-hover:text-white">
-              <ArrowUpRight className="h-3 w-3" />
+            <div className="flex shrink-0 items-center gap-1">
+              <Link
+                href={canvasHref}
+                className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2.5 text-[11px] font-semibold text-primary transition-all hover:border-primary/40 hover:bg-primary hover:text-white"
+                title={tp("canvas.nav")}
+              >
+                <Network className="h-3.5 w-3.5" />
+                {tp("canvas.nav")}
+              </Link>
+              <Link
+                href={episodesHref}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-[--text-muted] transition-all duration-200 hover:bg-primary hover:text-white"
+                title={t("title")}
+              >
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
-        </div>
-      </Link>
+      </article>
 
       {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
