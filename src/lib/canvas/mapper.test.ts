@@ -73,4 +73,31 @@ describe("buildCanvasGraph", () => {
     expect(graph.edges.some((edge) => edge.id === "manual-1")).toBe(true);
     expect(graph.edges.some((edge) => edge.id === "stale-1")).toBe(false);
   });
+
+  it("does not show an idle export node before the project has output", () => {
+    const graph = buildCanvasGraph({
+      id: "project-1",
+      title: "Empty Project",
+      episodes: [],
+      characters: [],
+      shots: [],
+    });
+
+    expect(graph.nodes.map((node) => node.id)).toEqual(["project:project-1"]);
+    expect(graph.edges).toEqual([]);
+  });
+
+  it("shows the export node once a final video exists", () => {
+    const graph = buildCanvasGraph({
+      id: "project-1",
+      title: "Finished Project",
+      finalVideoUrl: "/exports/final.mp4",
+      episodes: [],
+      characters: [],
+      shots: [],
+    });
+
+    expect(graph.nodes.map((node) => node.id)).toContain("export:project-1");
+    expect(graph.edges.some((edge) => edge.source === "project:project-1" && edge.target === "export:project-1")).toBe(true);
+  });
 });

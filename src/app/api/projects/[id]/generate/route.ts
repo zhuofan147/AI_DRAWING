@@ -40,6 +40,7 @@ import { buildShotSplitPrompt } from "@/lib/ai/prompts/shot-split";
 import { resolvePrompt, resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { getPromptDefinition } from "@/lib/ai/prompts/registry";
 import { getModelMaxDuration } from "@/lib/ai/model-limits";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 import {
   buildFirstFramePrompt,
   buildLastFramePrompt,
@@ -174,6 +175,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  const userId = getUserIdFromRequest(request);
 
   const project = await findProject(request, projectId);
   if (!project) {
@@ -2792,7 +2794,7 @@ async function handleSingleVideoPrompt(
   // Reference mode: pass ALL scene reference frames (ordered) so multi-
   // scene shots (ground → sky etc.) get the full spatial context.
   const visionFrames: string[] = [];
-  let sceneMetaList: Array<{ sceneName?: string } | null> = [];
+  const sceneMetaList: Array<{ sceneName?: string } | null> = [];
   if (genMode === "reference") {
     const sceneAssets = shotView.referenceImages
       .filter((r) => r.fileUrl)

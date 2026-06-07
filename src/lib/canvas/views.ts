@@ -20,6 +20,8 @@ export const canvasViewKinds: CanvasViewKind[] = [
 ];
 
 const generationActions = new Set<CanvasActionKind>([
+  "generate-script",
+  "extract-characters",
   "generate-frame",
   "generate-video-prompt",
   "generate-video",
@@ -29,9 +31,10 @@ const generationActions = new Set<CanvasActionKind>([
   "assemble-video",
 ]);
 
-const directorKinds = new Set<CanvasNodeKind>(["episode", "shot", "asset"]);
-const director3dKinds = new Set<CanvasNodeKind>(["episode", "shot", "character", "asset"]);
-const cameraPlanKinds = new Set<CanvasNodeKind>(["episode", "shot"]);
+const assetBoardKinds = new Set<CanvasNodeKind>(["asset", "image", "video", "audio", "file"]);
+const directorKinds = new Set<CanvasNodeKind>(["episode", "shot", "asset", "storyboard_script"]);
+const director3dKinds = new Set<CanvasNodeKind>(["episode", "shot", "character", "asset", "director_3d"]);
+const cameraPlanKinds = new Set<CanvasNodeKind>(["episode", "shot", "composition"]);
 
 function textIncludesPanorama(value?: string | number | boolean | null) {
   return String(value ?? "")
@@ -51,7 +54,7 @@ function isPanoramaAsset(node: CanvasNodeData) {
 export function isNodeVisibleInCanvasView(node: CanvasNodeData, viewKind: CanvasViewKind) {
   if (viewKind === "flow") return true;
   if (viewKind === "asset_board") {
-    return node.kind === "asset" || (node.kind === "character" && Boolean(node.previewUrl));
+    return assetBoardKinds.has(node.kind) || (node.kind === "character" && Boolean(node.previewUrl));
   }
   if (viewKind === "task_center") {
     return node.status === "running" ||
@@ -59,7 +62,7 @@ export function isNodeVisibleInCanvasView(node: CanvasNodeData, viewKind: Canvas
       node.actions.some((action) => generationActions.has(action));
   }
   if (viewKind === "director") return directorKinds.has(node.kind);
-  if (viewKind === "panorama_360") return isPanoramaAsset(node);
+  if (viewKind === "panorama_360") return node.kind === "panorama_360" || isPanoramaAsset(node);
   if (viewKind === "director_3d") return director3dKinds.has(node.kind);
   if (viewKind === "camera_plan") return cameraPlanKinds.has(node.kind);
   return false;

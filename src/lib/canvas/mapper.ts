@@ -196,20 +196,28 @@ export function buildCanvasGraph(
     }
   }
 
-  const exportNodeId = nodeId("export", project.id);
-  nodes.push({
-    id: exportNodeId,
-    kind: "export",
-    entityId: project.id,
-    title: "导出",
-    subtitle: project.finalVideoUrl ? "最终视频已生成" : "暂无最终视频",
-    status: project.finalVideoUrl ? "completed" : "idle",
-    href: `/api/projects/${project.id}/download`,
-    previewUrl: project.finalVideoUrl ?? null,
-    actions: ["download"],
-    meta: {},
-  });
-  edges.push(edge(projectNodeId, exportNodeId, "export"));
+  for (const item of savedLayout.nodes ?? []) {
+    if (!item.data) continue;
+    if (nodes.some((node) => node.id === item.data?.id)) continue;
+    nodes.push(item.data);
+  }
+
+  if (project.finalVideoUrl) {
+    const exportNodeId = nodeId("export", project.id);
+    nodes.push({
+      id: exportNodeId,
+      kind: "export",
+      entityId: project.id,
+      title: "导出",
+      subtitle: "最终视频已生成",
+      status: "completed",
+      href: `/api/projects/${project.id}/download`,
+      previewUrl: project.finalVideoUrl,
+      actions: ["download"],
+      meta: {},
+    });
+    edges.push(edge(projectNodeId, exportNodeId, "export"));
+  }
 
   return {
     nodes,

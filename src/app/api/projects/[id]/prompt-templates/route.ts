@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { promptTemplates } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { findProject } from "@/lib/assert-project-ownership";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 
 // GET: list all project-level overrides for user and project
 export async function GET(
@@ -10,6 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const userId = getUserIdFromRequest(request);
 
   const project = await findProject(request, id);
 

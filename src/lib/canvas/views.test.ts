@@ -36,6 +36,10 @@ describe("canvas view rules", () => {
 
   it("focuses the asset board on assets and visual character references", () => {
     expect(isNodeVisibleInCanvasView(node({ kind: "asset" }), "asset_board")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "image" }), "asset_board")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "video" }), "asset_board")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "audio" }), "asset_board")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "file" }), "asset_board")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "character", previewUrl: "/mira.png" }), "asset_board")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "character", previewUrl: null }), "asset_board")).toBe(false);
     expect(isNodeVisibleInCanvasView(node({ kind: "episode" }), "asset_board")).toBe(false);
@@ -43,6 +47,8 @@ describe("canvas view rules", () => {
 
   it("focuses the task center on executable or active nodes", () => {
     expect(isNodeVisibleInCanvasView(node({ kind: "shot", actions: ["generate-frame"] }), "task_center")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "text", actions: ["generate-script"] }), "task_center")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "text", actions: ["extract-characters"] }), "task_center")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "episode", actions: ["batch-videos"] }), "task_center")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "asset", status: "failed" }), "task_center")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "project", actions: ["open"] }), "task_center")).toBe(false);
@@ -52,14 +58,18 @@ describe("canvas view rules", () => {
     expect(isNodeVisibleInCanvasView(node({ kind: "episode" }), "director")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "shot" }), "director")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "asset" }), "director")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "storyboard_script" }), "director")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "export" }), "director")).toBe(false);
 
+    expect(isNodeVisibleInCanvasView(node({ kind: "director_3d" }), "director_3d")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "character" }), "director_3d")).toBe(true);
+    expect(isNodeVisibleInCanvasView(node({ kind: "composition" }), "camera_plan")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "shot" }), "camera_plan")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "character" }), "camera_plan")).toBe(false);
   });
 
   it("only shows panorama assets in the 360 view", () => {
+    expect(isNodeVisibleInCanvasView(node({ kind: "panorama_360" }), "panorama_360")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "asset", meta: { type: "panorama_360" } }), "panorama_360")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "asset", title: "大厅全景" }), "panorama_360")).toBe(true);
     expect(isNodeVisibleInCanvasView(node({ kind: "asset", meta: { type: "first_frame" } }), "panorama_360")).toBe(false);

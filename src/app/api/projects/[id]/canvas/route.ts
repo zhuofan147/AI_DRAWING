@@ -5,8 +5,12 @@ import { canvasLayouts } from "@/lib/db/schema";
 import { findProject } from "@/lib/assert-project-ownership";
 import { id as genId } from "@/lib/id";
 import type {
+  CanvasActionKind,
   CanvasEdgeData,
   CanvasLayoutNode,
+  CanvasNodeData,
+  CanvasNodeKind,
+  CanvasNodeStatus,
   CanvasViewport,
 } from "@/lib/canvas/types";
 
@@ -40,6 +44,73 @@ function stringValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+const allowedNodeKinds = new Set<CanvasNodeKind>([
+  "text",
+  "image",
+  "video",
+  "audio",
+  "note",
+  "storyboard_script",
+  "director_3d",
+  "panorama_360",
+  "composition",
+  "file",
+]);
+
+const allowedStatuses = new Set<CanvasNodeStatus>([
+  "idle",
+  "ready",
+  "running",
+  "completed",
+  "failed",
+]);
+
+const allowedActions = new Set<CanvasActionKind>([
+  "open",
+  "generate-script",
+  "extract-characters",
+  "generate-frame",
+  "generate-video-prompt",
+  "generate-video",
+  "batch-frames",
+  "batch-video-prompts",
+  "batch-videos",
+  "assemble-video",
+  "download",
+]);
+
+function sanitizeManualNodeData(value: unknown, fallbackId: string): CanvasNodeData | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const data = value as Record<string, unknown>;
+  const kind = stringValue(data.kind);
+  if (!kind || !allowedNodeKinds.has(kind as CanvasNodeKind)) return undefined;
+
+  const id = stringValue(data.id) ?? fallbackId;
+  const status = stringValue(data.status);
+  const actions = Array.isArray(data.actions) ? data.actions : [];
+  const meta = data.meta && typeof data.meta === "object"
+    ? data.meta as CanvasNodeData["meta"]
+    : {};
+
+  return {
+    id,
+    kind: kind as CanvasNodeKind,
+    entityId: stringValue(data.entityId) ?? id,
+    ...(stringValue(data.parentId) && { parentId: stringValue(data.parentId) ?? undefined }),
+    title: stringValue(data.title) ?? kind,
+    subtitle: stringValue(data.subtitle) ?? "",
+    status: status && allowedStatuses.has(status as CanvasNodeStatus)
+      ? status as CanvasNodeStatus
+      : "idle",
+    ...(stringValue(data.href) && { href: stringValue(data.href) ?? undefined }),
+    previewUrl: typeof data.previewUrl === "string" ? data.previewUrl : null,
+    actions: actions.filter((action): action is CanvasActionKind =>
+      typeof action === "string" && allowedActions.has(action as CanvasActionKind),
+    ),
+    meta,
+  };
+}
+
 export function sanitizeCanvasLayoutPayload(input: unknown): LayoutPayload {
   const body = input && typeof input === "object" ? input as Record<string, unknown> : {};
   const nodes = Array.isArray(body.nodes) ? body.nodes : [];
@@ -58,6 +129,8 @@ export function sanitizeCanvasLayoutPayload(input: unknown): LayoutPayload {
         : null;
       if (!id || !position) return [];
 
+      const data = sanitizeManualNodeData(node.data, id);
+
       return [{
         id,
         position: {
@@ -65,6 +138,7 @@ export function sanitizeCanvasLayoutPayload(input: unknown): LayoutPayload {
           y: finiteNumber(position.y, 0),
         },
         ...(typeof node.collapsed === "boolean" && { collapsed: node.collapsed }),
+        ...(data && { data }),
       }];
     }),
     edges: edges.flatMap((item) => {

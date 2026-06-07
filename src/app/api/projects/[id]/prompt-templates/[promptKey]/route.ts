@@ -4,6 +4,7 @@ import { promptTemplates, promptVersions } from "@/lib/db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import { findProject } from "@/lib/assert-project-ownership";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 
 // PUT: save project-level override (slots mode or full mode)
 export async function PUT(
@@ -11,6 +12,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; promptKey: string }> }
 ) {
   const { id, promptKey } = await params;
+  const userId = getUserIdFromRequest(request);
 
   const project = await findProject(request, id);
 
@@ -149,6 +151,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; promptKey: string }> }
 ) {
   const { id, promptKey } = await params;
+  const userId = getUserIdFromRequest(request);
 
   const project = await findProject(request, id);
 

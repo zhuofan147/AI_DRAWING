@@ -4,6 +4,16 @@ export type CanvasNodeKind =
   | "character"
   | "shot"
   | "asset"
+  | "text"
+  | "image"
+  | "video"
+  | "audio"
+  | "note"
+  | "storyboard_script"
+  | "director_3d"
+  | "panorama_360"
+  | "composition"
+  | "file"
   | "action"
   | "export";
 
@@ -16,6 +26,8 @@ export type CanvasNodeStatus =
 
 export type CanvasActionKind =
   | "open"
+  | "generate-script"
+  | "extract-characters"
   | "generate-frame"
   | "generate-video-prompt"
   | "generate-video"
@@ -50,6 +62,7 @@ export interface CanvasLayoutNode {
   id: string;
   position: { x: number; y: number };
   collapsed?: boolean;
+  data?: CanvasNodeData;
 }
 
 export interface CanvasViewport {

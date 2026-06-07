@@ -12,15 +12,19 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import type { CanvasActionKind, CanvasNodeData } from "@/lib/canvas/types";
 
 interface CanvasInspectorProps {
   node: CanvasNodeData | null;
   onAction: (action: CanvasActionKind, node: CanvasNodeData) => void;
+  onNodeContentChange?: (nodeId: string, content: string) => void;
 }
 
 const actionIcons: Partial<Record<CanvasActionKind, typeof Wand2>> = {
   open: ExternalLink,
+  "generate-script": Sparkles,
+  "extract-characters": Sparkles,
   "generate-frame": ImageIcon,
   "generate-video-prompt": Sparkles,
   "generate-video": Play,
@@ -39,7 +43,7 @@ const statusVariant = {
   failed: "destructive",
 } as const;
 
-export function CanvasInspector({ node, onAction }: CanvasInspectorProps) {
+export function CanvasInspector({ node, onAction, onNodeContentChange }: CanvasInspectorProps) {
   const t = useTranslations("project.canvas");
 
   if (!node) {
@@ -96,6 +100,17 @@ export function CanvasInspector({ node, onAction }: CanvasInspectorProps) {
         </div>
 
         <div className="mt-5 space-y-2">
+          {node.kind === "text" && (
+            <div className="mb-5 space-y-2">
+              <p className="text-xs font-semibold uppercase text-[--text-muted]">{t("nodeContent")}</p>
+              <Textarea
+                value={String(node.meta.content ?? "")}
+                onChange={(event) => onNodeContentChange?.(node.id, event.target.value)}
+                placeholder={t("textNodePlaceholder")}
+                className="min-h-48 resize-y rounded-lg text-sm leading-6"
+              />
+            </div>
+          )}
           <p className="text-xs font-semibold uppercase text-[--text-muted]">{t("actionsTitle")}</p>
           {node.actions.map((action) => {
             const Icon = actionIcons[action] ?? Wand2;

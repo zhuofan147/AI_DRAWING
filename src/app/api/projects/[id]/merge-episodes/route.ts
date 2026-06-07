@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { episodes } from "@/lib/db/schema";
-import { eq, inArray, asc } from "drizzle-orm";
+import { and, eq, inArray, asc } from "drizzle-orm";
 import { assembleVideo } from "@/lib/video/ffmpeg";
 import { findProject } from "@/lib/assert-project-ownership";
 

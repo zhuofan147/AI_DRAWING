@@ -12,8 +12,13 @@ type GenerateAction =
   | "batch_reference_video"
   | "video_assemble";
 
+type RoutableCanvasAction = Exclude<
+  CanvasActionKind,
+  "open" | "download" | "generate-script" | "extract-characters"
+>;
+
 export type CanvasGenerateInput = {
-  action: Exclude<CanvasActionKind, "open" | "download">;
+  action: RoutableCanvasAction;
   shotId?: string;
   episodeId?: string;
   versionId?: string;

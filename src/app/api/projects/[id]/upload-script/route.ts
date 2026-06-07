@@ -9,6 +9,7 @@ import { findProject } from "@/lib/assert-project-ownership";
 import { id as genId } from "@/lib/id";
 import { buildScriptSplitPrompt } from "@/lib/ai/prompts/script-split";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 
 export const maxDuration = 300;
 
@@ -88,6 +89,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: projectId } = await params;
+  const userId = getUserIdFromRequest(request);
 
   const project = await findProject(request, projectId);
 

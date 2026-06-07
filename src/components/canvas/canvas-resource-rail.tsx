@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { Box, Film, ImageIcon, Layers, Search, UserRound } from "lucide-react";
+import { Box, Film, ImageIcon, Layers, Music, NotebookText, Search, UserRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { CanvasNodeData, CanvasNodeKind } from "@/lib/canvas/types";
@@ -21,11 +21,38 @@ const kindIcons: Record<CanvasNodeKind, typeof Box> = {
   character: UserRound,
   shot: ImageIcon,
   asset: Box,
+  text: NotebookText,
+  image: ImageIcon,
+  video: Film,
+  audio: Music,
+  note: NotebookText,
+  storyboard_script: NotebookText,
+  director_3d: Box,
+  panorama_360: Box,
+  composition: Layers,
+  file: Box,
   action: Box,
   export: Box,
 };
 
-const groups: CanvasNodeKind[] = ["project", "episode", "character", "shot", "asset", "export"];
+const groups: CanvasNodeKind[] = [
+  "project",
+  "text",
+  "image",
+  "video",
+  "audio",
+  "note",
+  "storyboard_script",
+  "director_3d",
+  "panorama_360",
+  "composition",
+  "file",
+  "episode",
+  "character",
+  "shot",
+  "asset",
+  "export",
+];
 
 export function CanvasResourceRail({
   nodes,

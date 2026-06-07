@@ -17,4 +17,34 @@ describe("canvas layout api helpers", () => {
     expect(payload.nodes[0]).toEqual({ id: "project:1", position: { x: 1, y: 2 } });
     expect(payload.viewport).toEqual({ x: 3, y: 4, zoom: 0.8 });
   });
+
+  it("preserves manual canvas node data", () => {
+    const payload = sanitizeCanvasLayoutPayload({
+      nodes: [
+        {
+          id: "manual:text:1",
+          position: { x: 10, y: 20 },
+          data: {
+            id: "manual:text:1",
+            kind: "text",
+            entityId: "manual:text:1",
+            title: "小说文本",
+            subtitle: "粘贴小说内容",
+            status: "ready",
+            actions: ["generate-script", "extract-characters"],
+            meta: { content: "第一章" },
+          },
+        },
+      ],
+      edges: [],
+      viewport: {},
+    });
+
+    expect(payload.nodes[0]?.data).toMatchObject({
+      id: "manual:text:1",
+      kind: "text",
+      title: "小说文本",
+      meta: { content: "第一章" },
+    });
+  });
 });
