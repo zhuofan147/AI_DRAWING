@@ -67,6 +67,18 @@
       "actionQueued": "작업을 제출했습니다",
       "actionFailed": "작업 제출 실패",
       "runningAction": "캔버스 작업을 제출 중...",
+      "pageFlow": {
+        "trigger": "페이지 흐름",
+        "items": {
+          "episodes": "에피소드",
+          "script": "각본",
+          "characters": "캐릭터",
+          "storyboard": "스토리보드",
+          "preview": "미리보기",
+          "import": "각본 가져오기",
+          "prompts": "프롬프트"
+        }
+      },
       "filters": {
         "allKinds": "모든 유형",
         "allStatuses": "모든 상태"

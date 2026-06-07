@@ -403,6 +403,8 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <CanvasToolbar
+          locale={locale}
+          projectId={projectId}
           kindFilter={kindFilter}
           statusFilter={statusFilter}
           ratio={ratio}

@@ -67,6 +67,18 @@
       "actionQueued": "タスクを送信しました",
       "actionFailed": "タスク送信に失敗しました",
       "runningAction": "キャンバスタスクを送信中...",
+      "pageFlow": {
+        "trigger": "ページフロー",
+        "items": {
+          "episodes": "エピソード",
+          "script": "脚本",
+          "characters": "キャラクター",
+          "storyboard": "ストーリーボード",
+          "preview": "プレビュー",
+          "import": "脚本インポート",
+          "prompts": "プロンプト"
+        }
+      },
       "filters": {
         "allKinds": "すべての種類",
         "allStatuses": "すべての状態"

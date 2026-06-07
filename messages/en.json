@@ -67,6 +67,18 @@
       "actionQueued": "Task submitted",
       "actionFailed": "Task submission failed",
       "runningAction": "Submitting canvas task...",
+      "pageFlow": {
+        "trigger": "Page Flow",
+        "items": {
+          "episodes": "Episodes",
+          "script": "Script",
+          "characters": "Characters",
+          "storyboard": "Storyboard",
+          "preview": "Preview",
+          "import": "Import Script",
+          "prompts": "Prompts"
+        }
+      },
       "filters": {
         "allKinds": "All Types",
         "allStatuses": "All Statuses"

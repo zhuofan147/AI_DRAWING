@@ -67,6 +67,18 @@
       "actionQueued": "任务已提交",
       "actionFailed": "任务提交失败",
       "runningAction": "正在提交画布任务...",
+      "pageFlow": {
+        "trigger": "页面流程",
+        "items": {
+          "episodes": "分集管理",
+          "script": "剧本",
+          "characters": "角色",
+          "storyboard": "分镜",
+          "preview": "预览",
+          "import": "导入剧本",
+          "prompts": "提示词"
+        }
+      },
       "filters": {
         "allKinds": "全部类型",
         "allStatuses": "全部状态"

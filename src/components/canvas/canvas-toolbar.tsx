@@ -1,17 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
+  BookOpenText,
   Check,
   ChevronDown,
+  Clapperboard,
+  Eye,
   Filter,
   LayoutGrid,
+  ListVideo,
   RefreshCw,
+  Route,
   Save,
+  Settings2,
   SlidersHorizontal,
+  UploadCloud,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  buildCanvasPageFlowLinks,
+  type CanvasPageFlowLinkKey,
+} from "@/lib/canvas/page-flow-links";
 import { cn } from "@/lib/utils";
 import type { CanvasNodeKind, CanvasNodeStatus } from "@/lib/canvas/types";
 
@@ -19,6 +33,8 @@ export type CanvasKindFilter = "all" | CanvasNodeKind;
 export type CanvasStatusFilter = "all" | CanvasNodeStatus;
 
 interface CanvasToolbarProps {
+  locale: string;
+  projectId: string;
   kindFilter: CanvasKindFilter;
   statusFilter: CanvasStatusFilter;
   ratio: string;
@@ -52,6 +68,16 @@ const statusOptions: CanvasStatusFilter[] = [
   "completed",
   "failed",
 ];
+
+const pageFlowIcons: Record<CanvasPageFlowLinkKey, LucideIcon> = {
+  episodes: ListVideo,
+  script: BookOpenText,
+  characters: Users,
+  storyboard: Clapperboard,
+  preview: Eye,
+  import: UploadCloud,
+  prompts: Settings2,
+};
 
 function ToolbarDropdown<T extends string>({
   value,
@@ -150,7 +176,87 @@ function ToolbarDropdown<T extends string>({
   );
 }
 
+function PageFlowMenu({ locale, projectId }: { locale: string; projectId: string }) {
+  const t = useTranslations("project.canvas.pageFlow");
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const links = buildCanvasPageFlowLinks(locale, projectId);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          "flex h-8 items-center gap-2 rounded-lg border px-2.5 text-[13px] font-medium outline-none transition-all",
+          "border-[var(--border-subtle)] bg-[var(--panel)] text-[var(--text-secondary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+          "hover:border-[var(--border-hover)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]",
+          "focus-visible:border-primary/60 focus-visible:ring-2 focus-visible:ring-primary/20",
+          open && "border-primary/55 bg-[var(--surface-hover)] text-[var(--text-primary)] ring-2 ring-primary/15",
+        )}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Route className="h-3.5 w-3.5 text-primary" />
+        <span>{t("trigger")}</span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-[var(--text-muted)] transition-transform",
+            open && "rotate-180 text-primary",
+          )}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 top-[calc(100%+6px)] z-50 w-44 overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--panel)] p-1 shadow-2xl shadow-black/45 ring-1 ring-white/[0.04]"
+        >
+          {links.map((link) => {
+            const Icon = pageFlowIcons[link.key];
+            return (
+              <Link
+                key={link.key}
+                href={link.href}
+                role="menuitem"
+                className="flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                onClick={() => setOpen(false)}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <span className="truncate">{t(`items.${link.key}`)}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CanvasToolbar({
+  locale,
+  projectId,
   kindFilter,
   statusFilter,
   ratio,
@@ -181,7 +287,7 @@ export function CanvasToolbar({
   ];
 
   return (
-    <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[--border-subtle] bg-white px-3 py-2 lg:px-4">
+    <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-[--border-subtle] bg-[--panel] px-3 py-2 lg:px-4">
       <div className="flex items-center gap-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/8 text-primary">
           <SlidersHorizontal className="h-4 w-4" />
@@ -193,6 +299,10 @@ export function CanvasToolbar({
       </div>
 
       <div className="h-7 w-px bg-[--border-subtle]" />
+
+      <PageFlowMenu locale={locale} projectId={projectId} />
+
+      <div className="hidden h-7 w-px bg-[--border-subtle] sm:block" />
 
       <div className="flex items-center gap-2">
         <Filter className="h-4 w-4 text-[--text-muted]" />
