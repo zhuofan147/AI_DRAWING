@@ -4,14 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
-import { FileText, Users, Film, Play, ArrowLeft } from "lucide-react";
+import { FileText, Users, Film, Play, ArrowLeft, Network } from "lucide-react";
 
 interface ProjectNavProps {
   projectId: string;
   episodeId: string;
 }
 
-const icons = [FileText, Users, Film, Play];
+const icons = [Network, FileText, Users, Film, Play];
 
 export function ProjectNav({ projectId, episodeId }: ProjectNavProps) {
   const t = useTranslations("project");
@@ -22,10 +22,11 @@ export function ProjectNav({ projectId, episodeId }: ProjectNavProps) {
   const basePath = `/${locale}/project/${projectId}/episodes/${episodeId}`;
 
   const tabs = [
-    { key: "script", href: `${basePath}/script`, num: 1 },
-    { key: "characters", href: `${basePath}/characters`, num: 2 },
-    { key: "storyboard", href: `${basePath}/storyboard`, num: 3 },
-    { key: "preview", href: `${basePath}/preview`, num: 4 },
+    { key: "canvas", label: "canvas.nav", href: `/${locale}/project/${projectId}/canvas`, num: 0 },
+    { key: "script", label: "script", href: `${basePath}/script`, num: 1 },
+    { key: "characters", label: "characters", href: `${basePath}/characters`, num: 2 },
+    { key: "storyboard", label: "storyboard", href: `${basePath}/storyboard`, num: 3 },
+    { key: "preview", label: "preview", href: `${basePath}/preview`, num: 4 },
   ] as const;
 
   return (
@@ -72,7 +73,7 @@ export function ProjectNav({ projectId, episodeId }: ProjectNavProps) {
                   {tab.num}
                 </span>
                 <Icon className="h-4 w-4" />
-                <span>{t(tab.key)}</span>
+                <span>{t(tab.label)}</span>
               </Link>
             );
           })}
@@ -90,7 +91,7 @@ export function ProjectNav({ projectId, episodeId }: ProjectNavProps) {
                 key={tab.key}
                 href={tab.href}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 px-4 py-1.5 text-[11px] font-medium transition-colors",
+                  "flex flex-col items-center gap-0.5 px-2 py-1.5 text-[11px] font-medium transition-colors",
                   isActive
                     ? "text-primary"
                     : "text-[--text-muted] active:text-[--text-secondary]"
@@ -102,7 +103,7 @@ export function ProjectNav({ projectId, episodeId }: ProjectNavProps) {
                 )}>
                   <Icon className="h-4 w-4" />
                 </div>
-                <span>{t(tab.key)}</span>
+                <span>{t(tab.label)}</span>
               </Link>
             );
           })}

@@ -20,6 +20,14 @@ interface Dialogue {
   sequence: number;
 }
 
+interface EpisodeSummary {
+  id: string;
+  title: string;
+  sequence: number;
+  status: string;
+  finalVideoUrl: string | null;
+}
+
 /**
  * One row from the unified `shot_assets` table, exposed to the frontend.
  * type discriminates the role:
@@ -201,6 +209,7 @@ interface Project {
   status: string;
   finalVideoUrl: string | null;
   generationMode: "keyframe" | "reference";
+  episodes?: EpisodeSummary[];
   characters: Character[];
   shots: Shot[];
   versions: StoryboardVersion[];

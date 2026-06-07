@@ -421,3 +421,22 @@ export const agentBindings = sqliteTable("agent_bindings", {
   }).notNull(),
   agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
 });
+
+export const canvasLayouts = sqliteTable("canvas_layouts", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  episodeId: text("episode_id").references(() => episodes.id, {
+    onDelete: "cascade",
+  }),
+  scope: text("scope", { enum: ["project", "episode"] })
+    .notNull()
+    .default("project"),
+  nodesJson: text("nodes_json").notNull().default("[]"),
+  edgesJson: text("edges_json").notNull().default("[]"),
+  viewportJson: text("viewport_json").notNull().default("{}"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});

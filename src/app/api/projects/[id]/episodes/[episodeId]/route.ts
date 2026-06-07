@@ -9,7 +9,7 @@ import {
   storyboardVersions,
   episodeCharacters,
 } from "@/lib/db/schema";
-import { eq, asc, or, isNull, desc, inArray } from "drizzle-orm";
+import { eq, asc, or, isNull, desc, inArray, and } from "drizzle-orm";
 import { findProject } from "@/lib/assert-project-ownership";
 import { markDownstreamStale } from "@/lib/staleness";
 
