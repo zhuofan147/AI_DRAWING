@@ -1,18 +1,18 @@
-# AIComicBuilder 画布工作区实施计划
+# AI_DRAWING 画布工作区实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在 `G:\Project\AIComicBuilder` 中新增项目级画布工作区，把现有项目、分集、角色、镜头、素材、生成动作和导出能力映射成更易操作的节点图。
+**Goal:** 在 `G:\Project\AI_DRAWING` 中新增项目级画布工作区，把现有项目、分集、角色、镜头、素材、生成动作和导出能力映射成更易操作的节点图。
 
-**Architecture:** AIComicBuilder 继续作为产品主干，不重写现有生成链路。新增一层薄画布能力：Drizzle 保存布局、API 读写画布布局、纯函数映射业务数据到节点图、React Flow 渲染画布、节点操作复用现有 `/api/projects/[id]/generate`。
+**Architecture:** AI_DRAWING 作为自有产品主干，AIComicBuilder 仅作为参考来源和一次性迁入素材。不重写现有可用生成链路，新增一层薄画布能力：Drizzle 保存布局、API 读写画布布局、纯函数映射业务数据到节点图、React Flow 渲染画布、节点操作复用现有 `/api/projects/[id]/generate`。
 
-**Tech Stack:** Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, Zustand, Drizzle ORM, SQLite, React Flow, Vitest, AIComicBuilder 现有 API。
+**Tech Stack:** Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, Zustand, Drizzle ORM, SQLite, React Flow, Vitest, AI_DRAWING 现有 API。
 
 ---
 
 ## 范围确认
 
-本计划只实现第一版“AIComicBuilder 主干 + 项目级画布工作区”。
+本计划只实现第一版“AI_DRAWING 自有项目 + 项目级画布工作区”。
 
 本计划会做：
 
@@ -27,7 +27,7 @@
 
 本计划不会做：
 
-- 不重写 AIComicBuilder 的生成流程。
+- 不重写已迁入的生成流程。
 - 不替代现有分集、角色、分镜、预览、提示词页面。
 - 不新增第二套项目/分集/镜头业务模型。
 - 不做 Electron/Vite 桌面端打包。
@@ -37,7 +37,7 @@
 
 ## 文件结构
 
-所有代码修改都发生在 `G:\Project\AIComicBuilder`：
+所有代码修改都发生在 `G:\Project\AI_DRAWING`：
 
 - Modify: `package.json`，新增 `reactflow`、`vitest`、`vite-tsconfig-paths` 和 `test` 脚本。
 - Create: `vitest.config.ts`，让 Vitest 能解析 `@/...` 路径别名。

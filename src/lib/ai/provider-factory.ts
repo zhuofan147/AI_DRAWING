@@ -1,0 +1,162 @@
+import { OpenAIProvider } from "./providers/openai";
+import { GeminiProvider } from "./providers/gemini";
+import { SeedanceProvider } from "./providers/seedance";
+import { VeoProvider } from "./providers/veo";
+import { KlingImageProvider } from "./providers/kling-image";
+import { KlingVideoProvider } from "./providers/kling-video";
+import { WanVideoProvider } from "./providers/wan-video";
+import { UCloudSeedanceProvider } from "./providers/ucloud-seedance";
+import { DashScopeImageProvider } from "./providers/dashscope-image";
+import { getAIProvider, getVideoProvider } from "./index";
+import type { AIProvider, VideoProvider } from "./types";
+
+interface ProviderConfig {
+  protocol: string;
+  baseUrl: string;
+  apiKey: string;
+  secretKey?: string;
+  modelId: string;
+}
+
+export interface ModelConfigPayload {
+  text?: ProviderConfig | null;
+  image?: ProviderConfig | null;
+  video?: ProviderConfig | null;
+}
+
+export function createAIProvider(config: ProviderConfig, uploadDir?: string): AIProvider {
+  switch (config.protocol) {
+    case "openai":
+      return new OpenAIProvider({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "gemini":
+      return new GeminiProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "kling":
+      return new KlingImageProvider({
+        apiKey: config.apiKey,
+        secretKey: config.secretKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "dashscope":
+      return new DashScopeImageProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    default:
+      throw new Error(`Unsupported AI protocol: ${config.protocol}`);
+  }
+}
+
+export function createVideoProvider(config: ProviderConfig, uploadDir?: string): VideoProvider {
+  switch (config.protocol) {
+    case "seedance":
+      return new SeedanceProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "gemini":
+      return new VeoProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "kling":
+      return new KlingVideoProvider({
+        apiKey: config.apiKey,
+        secretKey: config.secretKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "wan":
+      return new WanVideoProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    case "ucloud-seedance":
+      return new UCloudSeedanceProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+        ...(uploadDir && { uploadDir }),
+      });
+    default:
+      throw new Error(`Unsupported video protocol: ${config.protocol}`);
+  }
+}
+
+export function resolveAIProvider(modelConfig?: ModelConfigPayload): AIProvider {
+  if (modelConfig?.text) {
+    return createAIProvider(modelConfig.text);
+  }
+  return getAIProvider();
+}
+
+export function resolveImageProvider(modelConfig?: ModelConfigPayload, uploadDir?: string): AIProvider {
+  // Prefer image config
+  if (modelConfig?.image) {
+    return createAIProvider(modelConfig.image, uploadDir);
+  }
+  // Fallback: try video config (same API key often works for both image and video)
+  if (modelConfig?.video) {
+    try {
+      return createAIProvider(modelConfig.video, uploadDir);
+    } catch {
+      // Video protocol not directly supported — wrap as OpenAI-compatible anyway.
+      // Many providers (APIMart, etc.) use OpenAI-compatible endpoints for all modalities.
+      try {
+        return new OpenAIProvider({
+          apiKey: modelConfig.video.apiKey,
+          baseURL: modelConfig.video.baseUrl,
+          model: modelConfig.video.modelId,
+          ...(uploadDir && { uploadDir }),
+        });
+      } catch {
+        // Last resort
+      }
+    }
+  }
+  // Last resort: try text config for image generation (some models do both)
+  if (modelConfig?.text) {
+    try {
+      return createAIProvider(modelConfig.text, uploadDir);
+    } catch {
+      try {
+        return new OpenAIProvider({
+          apiKey: modelConfig.text.apiKey,
+          baseURL: modelConfig.text.baseUrl,
+          model: modelConfig.text.modelId,
+          ...(uploadDir && { uploadDir }),
+        });
+      } catch {
+        // exhausted all options
+      }
+    }
+  }
+  return getAIProvider(uploadDir);
+}
+
+export function resolveVideoProvider(modelConfig?: ModelConfigPayload, uploadDir?: string): VideoProvider {
+  if (modelConfig?.video) {
+    return createVideoProvider(modelConfig.video, uploadDir);
+  }
+  return getVideoProvider(uploadDir);
+}
