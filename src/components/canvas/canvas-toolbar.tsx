@@ -26,6 +26,7 @@ import {
   buildCanvasPageFlowLinks,
   type CanvasPageFlowLinkKey,
 } from "@/lib/canvas/page-flow-links";
+import { canvasViewKinds, type CanvasViewKind } from "@/lib/canvas/views";
 import { cn } from "@/lib/utils";
 import type { CanvasNodeKind, CanvasNodeStatus } from "@/lib/canvas/types";
 
@@ -35,12 +36,14 @@ export type CanvasStatusFilter = "all" | CanvasNodeStatus;
 interface CanvasToolbarProps {
   locale: string;
   projectId: string;
+  viewKind: CanvasViewKind;
   kindFilter: CanvasKindFilter;
   statusFilter: CanvasStatusFilter;
   ratio: string;
   overwrite: boolean;
   saving: boolean;
   refreshing: boolean;
+  onViewKindChange: (value: CanvasViewKind) => void;
   onKindFilterChange: (value: CanvasKindFilter) => void;
   onStatusFilterChange: (value: CanvasStatusFilter) => void;
   onRatioChange: (value: string) => void;
@@ -257,12 +260,14 @@ function PageFlowMenu({ locale, projectId }: { locale: string; projectId: string
 export function CanvasToolbar({
   locale,
   projectId,
+  viewKind,
   kindFilter,
   statusFilter,
   ratio,
   overwrite,
   saving,
   refreshing,
+  onViewKindChange,
   onKindFilterChange,
   onStatusFilterChange,
   onRatioChange,
@@ -272,6 +277,10 @@ export function CanvasToolbar({
   onSave,
 }: CanvasToolbarProps) {
   const t = useTranslations("project.canvas");
+  const viewItems = canvasViewKinds.map((view) => ({
+    value: view,
+    label: t(`views.${view}`),
+  }));
   const kindItems = kindOptions.map((kind) => ({
     value: kind,
     label: kind === "all" ? t("filters.allKinds") : t(`kinds.${kind}`),
@@ -306,6 +315,12 @@ export function CanvasToolbar({
 
       <div className="flex items-center gap-2">
         <Filter className="h-4 w-4 text-[--text-muted]" />
+        <ToolbarDropdown
+          value={viewKind}
+          options={viewItems}
+          onChange={onViewKindChange}
+          className="w-[148px]"
+        />
         <ToolbarDropdown
           value={kindFilter}
           options={kindItems}

@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-fetch";
 import { buildGenerateRequest } from "@/lib/canvas/actions";
 import { buildCanvasGraph } from "@/lib/canvas/mapper";
+import { isNodeVisibleInCanvasView, type CanvasViewKind } from "@/lib/canvas/views";
 import type {
   CanvasActionKind,
   CanvasEdgeData,
@@ -96,10 +97,12 @@ function flowEdge(edge: CanvasEdgeData): Edge {
 
 function isNodeVisible(
   node: CanvasNodeData,
+  viewKind: CanvasViewKind,
   kindFilter: CanvasKindFilter,
   statusFilter: CanvasStatusFilter,
   search: string,
 ) {
+  if (!isNodeVisibleInCanvasView(node, viewKind)) return false;
   if (kindFilter !== "all" && node.kind !== kindFilter) return false;
   if (statusFilter !== "all" && node.status !== statusFilter) return false;
 
@@ -127,6 +130,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
   const [refreshing, setRefreshing] = useState(false);
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [viewKind, setViewKind] = useState<CanvasViewKind>("flow");
   const [kindFilter, setKindFilter] = useState<CanvasKindFilter>("all");
   const [statusFilter, setStatusFilter] = useState<CanvasStatusFilter>("all");
   const [search, setSearch] = useState("");
@@ -174,6 +178,10 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
   const graphNodesById = useMemo(() => {
     return new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
   }, [graph]);
+
+  const viewNodes = useMemo(() => {
+    return graph?.nodes.filter((node) => isNodeVisibleInCanvasView(node, viewKind)) ?? [];
+  }, [graph, viewKind]);
 
   const selectedNode = selectedNodeId ? graphNodesById.get(selectedNodeId) ?? null : null;
 
@@ -273,7 +281,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     if (!graph) return;
     const hiddenIds = new Set(
       graph.nodes
-        .filter((node) => !isNodeVisible(node, kindFilter, statusFilter, search))
+        .filter((node) => !isNodeVisible(node, viewKind, kindFilter, statusFilter, search))
         .map((node) => node.id),
     );
 
@@ -289,7 +297,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
         hidden: hiddenIds.has(item.source) || hiddenIds.has(item.target),
       })),
     );
-  }, [graph, kindFilter, search, setEdges, setNodes, statusFilter]);
+  }, [graph, kindFilter, search, setEdges, setNodes, statusFilter, viewKind]);
 
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
@@ -394,7 +402,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] min-h-[640px] flex-1 overflow-hidden bg-[--surface]">
       <CanvasResourceRail
-        nodes={graph.nodes}
+        nodes={viewNodes}
         selectedId={selectedNodeId}
         search={search}
         onSearchChange={setSearch}
@@ -405,12 +413,14 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
         <CanvasToolbar
           locale={locale}
           projectId={projectId}
+          viewKind={viewKind}
           kindFilter={kindFilter}
           statusFilter={statusFilter}
           ratio={ratio}
           overwrite={overwrite}
           saving={saving}
           refreshing={refreshing}
+          onViewKindChange={setViewKind}
           onKindFilterChange={setKindFilter}
           onStatusFilterChange={setStatusFilter}
           onRatioChange={setRatio}

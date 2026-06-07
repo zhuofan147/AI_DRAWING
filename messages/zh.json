@@ -67,6 +67,15 @@
       "actionQueued": "任务已提交",
       "actionFailed": "任务提交失败",
       "runningAction": "正在提交画布任务...",
+      "views": {
+        "flow": "流程视图",
+        "asset_board": "素材板",
+        "task_center": "任务中心",
+        "director": "导演台",
+        "panorama_360": "360 全景",
+        "director_3d": "3D 导演视角",
+        "camera_plan": "镜头机位规划"
+      },
       "pageFlow": {
         "trigger": "页面流程",
         "items": {

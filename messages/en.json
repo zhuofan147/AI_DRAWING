@@ -67,6 +67,15 @@
       "actionQueued": "Task submitted",
       "actionFailed": "Task submission failed",
       "runningAction": "Submitting canvas task...",
+      "views": {
+        "flow": "Flow View",
+        "asset_board": "Asset Board",
+        "task_center": "Task Center",
+        "director": "Director Desk",
+        "panorama_360": "360 Panorama",
+        "director_3d": "3D Director View",
+        "camera_plan": "Camera Plan"
+      },
       "pageFlow": {
         "trigger": "Page Flow",
         "items": {

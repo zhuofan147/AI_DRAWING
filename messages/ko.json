@@ -67,6 +67,15 @@
       "actionQueued": "작업을 제출했습니다",
       "actionFailed": "작업 제출 실패",
       "runningAction": "캔버스 작업을 제출 중...",
+      "views": {
+        "flow": "흐름 보기",
+        "asset_board": "소재 보드",
+        "task_center": "작업 센터",
+        "director": "디렉터 데스크",
+        "panorama_360": "360 파노라마",
+        "director_3d": "3D 디렉터 뷰",
+        "camera_plan": "카메라 계획"
+      },
       "pageFlow": {
         "trigger": "페이지 흐름",
         "items": {

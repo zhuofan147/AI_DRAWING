@@ -67,6 +67,15 @@
       "actionQueued": "タスクを送信しました",
       "actionFailed": "タスク送信に失敗しました",
       "runningAction": "キャンバスタスクを送信中...",
+      "views": {
+        "flow": "フロー表示",
+        "asset_board": "素材ボード",
+        "task_center": "タスクセンター",
+        "director": "ディレクター台",
+        "panorama_360": "360 パノラマ",
+        "director_3d": "3D ディレクター視点",
+        "camera_plan": "カメラ計画"
+      },
       "pageFlow": {
         "trigger": "ページフロー",
         "items": {
