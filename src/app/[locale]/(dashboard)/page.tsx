@@ -4,6 +4,7 @@ import { desc } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { ProjectCard } from "@/components/project-card";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
+import { StyleLibrarySection } from "@/components/style-library-section";
 import { Clapperboard } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -36,6 +37,8 @@ export default async function DashboardPage() {
         </div>
         <CreateProjectDialog />
       </div>
+
+      <StyleLibrarySection />
 
       {allProjects.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[--border-subtle] bg-[--surface]/50 py-24">

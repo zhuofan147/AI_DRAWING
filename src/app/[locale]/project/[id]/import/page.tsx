@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, use, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, use } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
@@ -33,6 +33,11 @@ interface SplitEpisode {
   characters?: string[];
 }
 
+interface CreatedEpisode {
+  id: string;
+  title: string;
+}
+
 interface LogEntry {
   id: string;
   step: number;
@@ -60,7 +65,6 @@ export default function ImportPage({
   const locale = useLocale();
   const router = useRouter();
   const t = useTranslations("import");
-  const tc = useTranslations("common");
   const textGuard = useModelGuard("text");
   const getModelConfig = useModelStore((s) => s.getModelConfig);
 
@@ -90,6 +94,8 @@ export default function ImportPage({
   // History mode
   const [historyMode, setHistoryMode] = useState(false);
   const [selectedStep, setSelectedStep] = useState<Step | null>(null);
+  const [autoProducing, setAutoProducing] = useState(false);
+  const [autoStage, setAutoStage] = useState("");
 
   // Load existing logs on mount
   useEffect(() => {
@@ -309,6 +315,163 @@ export default function ImportPage({
     }
   }
 
+  async function consumeStreamingResponse(response: Response) {
+    if (!response.body) {
+      await response.text();
+      return;
+    }
+    const reader = response.body.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+  }
+
+  async function runAutoProduction() {
+    if (!file) return;
+    if (!textGuard()) return;
+
+    setAutoProducing(true);
+    setAutoStage(t("autoProducePreparing"));
+    setHistoryMode(false);
+    setSelectedStep(null);
+    setLogs([]);
+    setStepStatus({ 1: "idle", 2: "idle", 3: "idle", 4: "idle" });
+
+    let activeStep: Step = 1;
+    try {
+      await apiFetch(`/api/projects/${projectId}/import/logs`, { method: "DELETE" });
+
+      activeStep = 1;
+      setCurrentStep(1);
+      setStepStatus((prev) => ({ ...prev, 1: "running" }));
+      setAutoStage(t("autoProduceParsing"));
+      addLog(1, "running", `自动制片：解析文件 ${file.name}`);
+      const form = new FormData();
+      form.append("file", file);
+      const parseRes = await apiFetch(`/api/projects/${projectId}/import/parse`, {
+        method: "POST",
+        body: form,
+      });
+      if (!parseRes.ok) {
+        const err = await parseRes.json();
+        throw new Error(err.error || `HTTP ${parseRes.status}`);
+      }
+      const parseData = await parseRes.json();
+      const text = parseData.text as string;
+      setFullText(text);
+      addLog(1, "done", `解析完成，共 ${parseData.charCount} 字`);
+      setStepStatus((prev) => ({ ...prev, 1: "done" }));
+
+      activeStep = 2;
+      setCurrentStep(2);
+      setStepStatus((prev) => ({ ...prev, 2: "running" }));
+      setAutoStage(t("autoProduceCharacters"));
+      addLog(2, "running", "自动制片：提取角色与关系");
+      const characterRes = await apiFetch(`/api/projects/${projectId}/import/characters`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, modelConfig: getModelConfig() }),
+      });
+      if (!characterRes.ok) {
+        const err = await characterRes.json();
+        throw new Error(err.error || `HTTP ${characterRes.status}`);
+      }
+      const characterData = await characterRes.json();
+      const extractedCharacters = characterData.characters as ExtractedCharacter[];
+      const extractedRelationships = characterData.relationships || [];
+      setCharacters(extractedCharacters);
+      setRelationships(extractedRelationships);
+      addLog(2, "done", `角色提取完成，共 ${extractedCharacters.length} 个角色`);
+      setStepStatus((prev) => ({ ...prev, 2: "done" }));
+
+      activeStep = 3;
+      setCurrentStep(3);
+      setStepStatus((prev) => ({ ...prev, 3: "running" }));
+      setAutoStage(t("autoProduceEpisodes"));
+      addLog(3, "running", "自动制片：拆分剧集");
+      const splitRes = await apiFetch(`/api/projects/${projectId}/import/split`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          allCharacters: extractedCharacters.map((c) => ({ name: c.name, scope: c.scope })),
+          modelConfig: getModelConfig(),
+        }),
+      });
+      if (!splitRes.ok) {
+        const err = await splitRes.json();
+        throw new Error(err.error || `HTTP ${splitRes.status}`);
+      }
+      const splitData = await splitRes.json();
+      const splitEpisodes = splitData.episodes as SplitEpisode[];
+      setEpisodes(splitEpisodes);
+      addLog(3, "done", `分集完成，共 ${splitEpisodes.length} 集`);
+      setStepStatus((prev) => ({ ...prev, 3: "done" }));
+
+      activeStep = 4;
+      setCurrentStep(4);
+      setStepStatus((prev) => ({ ...prev, 4: "running" }));
+      setAutoStage(t("autoProduceCreating"));
+      addLog(4, "running", "自动制片：创建剧集、角色和关系");
+      const generateRes = await apiFetch(`/api/projects/${projectId}/import/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          episodes: splitEpisodes,
+          characters: extractedCharacters,
+          relationships: extractedRelationships,
+        }),
+      });
+      if (!generateRes.ok) {
+        const err = await generateRes.json();
+        throw new Error(err.error || `HTTP ${generateRes.status}`);
+      }
+      const generateData = await generateRes.json();
+      const createdEpisodes = (generateData.episodes || []) as CreatedEpisode[];
+      addLog(4, "running", `已创建 ${generateData.characterCount} 个角色和 ${createdEpisodes.length} 集，开始生成分镜`);
+
+      for (let i = 0; i < createdEpisodes.length; i++) {
+        const episode = createdEpisodes[i];
+        setAutoStage(t("autoProduceStoryboards", { current: i + 1, total: createdEpisodes.length }));
+        addLog(4, "running", `生成分镜 ${i + 1}/${createdEpisodes.length}: ${episode.title}`);
+        const shotRes = await apiFetch(`/api/projects/${projectId}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "shot_split",
+            episodeId: episode.id,
+            modelConfig: getModelConfig(),
+          }),
+        });
+        if (!shotRes.ok) {
+          let message = `HTTP ${shotRes.status}`;
+          try {
+            const err = await shotRes.json();
+            message = err.error || message;
+          } catch {}
+          throw new Error(message);
+        }
+        await consumeStreamingResponse(shotRes);
+        addLog(4, "done", `分镜完成: ${episode.title}`);
+      }
+
+      addLog(4, "done", "自动制片完成，画布节点已准备同步");
+      setStepStatus((prev) => ({ ...prev, 4: "done" }));
+      toast.success(t("autoProduceComplete"));
+      router.push(`/${locale}/project/${projectId}/canvas`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Auto production failed";
+      const step = activeStep;
+      addLog(step, "error", `自动制片失败: ${msg}`);
+      setStepStatus((prev) => ({ ...prev, [step]: "error" }));
+      toast.error(msg);
+    } finally {
+      setAutoProducing(false);
+      setAutoStage("");
+    }
+  }
+
   // Retry handler for any failed step
   function retryStep() {
     const failedStep = ([1, 2, 3, 4] as Step[]).find((s) => stepStatus[s] === "error");
@@ -370,9 +533,9 @@ export default function ImportPage({
   };
 
   // Show characters review after step 2 done + step 3 idle
-  const showCharReview = stepStatus[2] === "done" && stepStatus[3] === "idle" && !historyMode;
+  const showCharReview = stepStatus[2] === "done" && stepStatus[3] === "idle" && !historyMode && !autoProducing;
   // Show episodes review after step 3 done + step 4 idle
-  const showEpReview = stepStatus[3] === "done" && stepStatus[4] === "idle" && !historyMode;
+  const showEpReview = stepStatus[3] === "done" && stepStatus[4] === "idle" && !historyMode && !autoProducing;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -470,15 +633,31 @@ export default function ImportPage({
               )}
             </div>
 
-            <Button
-              onClick={startPipeline}
-              disabled={!file}
-              className="w-full rounded-xl"
-              size="lg"
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              {t("startImport")}
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                onClick={runAutoProduction}
+                disabled={!file || autoProducing}
+                className="rounded-xl"
+                size="lg"
+              >
+                {autoProducing ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 h-4 w-4" />
+                )}
+                {autoProducing ? autoStage || t("autoProduce") : t("autoProduce")}
+              </Button>
+              <Button
+                onClick={startPipeline}
+                disabled={!file || autoProducing}
+                variant="outline"
+                className="rounded-xl"
+                size="lg"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                {t("startImport")}
+              </Button>
+            </div>
           </div>
         )}
 

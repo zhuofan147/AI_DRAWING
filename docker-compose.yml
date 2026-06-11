@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+    image: ai-drawing:local
+    container_name: ai-drawing
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/app/data/ai-drawing.db
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ai-drawing-tunnel
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    depends_on:
+      - app
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN}

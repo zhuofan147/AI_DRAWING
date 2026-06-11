@@ -26,7 +26,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const userId = getUserIdFromRequest(request);
-  const body = (await request.json()) as { title: string; script?: string };
+  const body = (await request.json()) as {
+    title: string;
+    script?: string;
+    colorPalette?: string;
+    worldSetting?: string;
+    useProjectPrompts?: number;
+  };
   const id = genId();
 
   // Use existing userId if available, otherwise reuse any existing project's userId
@@ -46,6 +52,9 @@ export async function POST(request: Request) {
       userId: effectiveUserId,
       title: body.title,
       script: body.script || "",
+      colorPalette: body.colorPalette || "",
+      worldSetting: body.worldSetting || "",
+      useProjectPrompts: body.useProjectPrompts ?? 0,
     })
     .returning();
 

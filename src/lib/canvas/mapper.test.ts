@@ -30,7 +30,7 @@ describe("buildCanvasGraph", () => {
       ],
     });
 
-    expect(graph.nodes.map((node) => node.id)).toContain("project:project-1");
+    expect(graph.nodes.map((node) => node.id)).not.toContain("project:project-1");
     expect(graph.nodes.map((node) => node.id)).toContain("episode:episode-1");
     expect(graph.nodes.map((node) => node.id)).toContain("character:char-1");
     expect(graph.nodes.map((node) => node.id)).toContain("shot:shot-1");
@@ -43,13 +43,22 @@ describe("buildCanvasGraph", () => {
       { id: "project-1", title: "Demo", episodes: [], characters: [], shots: [] },
       {
         nodes: [
-          { id: "project:project-1", position: { x: 10, y: 20 } },
+          { id: "manual:text:1", position: { x: 10, y: 20 }, data: {
+            id: "manual:text:1",
+            kind: "text",
+            entityId: "manual:text:1",
+            title: "文本",
+            subtitle: "草稿",
+            status: "idle",
+            actions: ["generate-script"],
+            meta: { source: "manual" },
+          } },
           { id: "missing:old", position: { x: 999, y: 999 } },
         ],
       },
     );
 
-    expect(graph.layoutNodes.find((node) => node.id === "project:project-1")?.position).toEqual({ x: 10, y: 20 });
+    expect(graph.layoutNodes.find((node) => node.id === "manual:text:1")?.position).toEqual({ x: 10, y: 20 });
     expect(graph.layoutNodes.some((node) => node.id === "missing:old")).toBe(false);
   });
 
@@ -64,8 +73,20 @@ describe("buildCanvasGraph", () => {
       },
       {
         edges: [
-          { id: "manual-1", source: "project:project-1", target: "episode:episode-1", label: "manual" },
-          { id: "stale-1", source: "project:project-1", target: "shot:missing", label: "manual" },
+          { id: "manual-1", source: "episode:episode-1", target: "manual:text:1", label: "manual" },
+          { id: "stale-1", source: "episode:episode-1", target: "shot:missing", label: "manual" },
+        ],
+        nodes: [
+          { id: "manual:text:1", position: { x: 100, y: 100 }, data: {
+            id: "manual:text:1",
+            kind: "text",
+            entityId: "manual:text:1",
+            title: "文本",
+            subtitle: "草稿",
+            status: "idle",
+            actions: ["generate-script"],
+            meta: { source: "manual" },
+          } },
         ],
       },
     );
@@ -83,7 +104,7 @@ describe("buildCanvasGraph", () => {
       shots: [],
     });
 
-    expect(graph.nodes.map((node) => node.id)).toEqual(["project:project-1"]);
+    expect(graph.nodes).toEqual([]);
     expect(graph.edges).toEqual([]);
   });
 
@@ -98,6 +119,6 @@ describe("buildCanvasGraph", () => {
     });
 
     expect(graph.nodes.map((node) => node.id)).toContain("export:project-1");
-    expect(graph.edges.some((edge) => edge.source === "project:project-1" && edge.target === "export:project-1")).toBe(true);
+    expect(graph.edges).toEqual([]);
   });
 });

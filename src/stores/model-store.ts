@@ -154,22 +154,35 @@ export const useModelStore = create<ModelStore>()(
 
       getModelConfig: () => {
         const state = get();
-        function resolve(ref: ModelRef | null) {
-          if (!ref) return null;
-          const provider = state.providers.find((p) => p.id === ref.providerId);
-          if (!provider) return null;
+        function providerConfig(provider: Provider, modelId: string) {
           return {
             protocol: provider.protocol,
             baseUrl: provider.baseUrl,
             apiKey: provider.apiKey,
             secretKey: provider.secretKey,
-            modelId: ref.modelId,
+            modelId,
           };
         }
+        function resolve(capability: Capability, ref: ModelRef | null) {
+          if (ref) {
+            const provider = state.providers.find((p) =>
+              p.id === ref.providerId && p.capability === capability
+            );
+            if (provider) return providerConfig(provider, ref.modelId);
+          }
+
+          const fallbackProvider = state.providers.find((p) =>
+            p.capability === capability && p.models.some((m) => m.checked)
+          );
+          const fallbackModel = fallbackProvider?.models.find((m) => m.checked);
+          if (!fallbackProvider || !fallbackModel) return null;
+
+          return providerConfig(fallbackProvider, fallbackModel.id);
+        }
         return {
-          text: resolve(state.defaultTextModel),
-          image: resolve(state.defaultImageModel),
-          video: resolve(state.defaultVideoModel),
+          text: resolve("text", state.defaultTextModel),
+          image: resolve("image", state.defaultImageModel),
+          video: resolve("video", state.defaultVideoModel),
         };
       },
     }),

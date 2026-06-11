@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import ReactFlow, {
@@ -9,7 +9,9 @@ import ReactFlow, {
   MiniMap,
   addEdge,
   type Connection,
+  type EdgeChange,
   type Edge,
+  type NodeChange,
   type Node,
   type ReactFlowInstance,
   useEdgesState,
@@ -30,6 +32,11 @@ import {
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-fetch";
 import { buildGenerateRequest, type CanvasGenerateInput } from "@/lib/canvas/actions";
+import {
+  canvasActionsForManualKind,
+  canvasKindFromUploadedFile,
+  nodeStatusFromPrompt,
+} from "@/lib/canvas/manual-nodes";
 import { buildCanvasGraph } from "@/lib/canvas/mapper";
 import { isNodeVisibleInCanvasView, type CanvasViewKind } from "@/lib/canvas/views";
 import type {
@@ -42,7 +49,7 @@ import type {
   CanvasViewport,
 } from "@/lib/canvas/types";
 import { useModelGuard } from "@/hooks/use-model-guard";
-import { useModelStore } from "@/stores/model-store";
+import { useModelStore, type Capability, type ModelConfig, type ModelRef, type Provider } from "@/stores/model-store";
 import { useProjectStore } from "@/stores/project-store";
 import { CanvasInspector } from "./canvas-inspector";
 import { CanvasNode } from "./canvas-node";
@@ -61,6 +68,16 @@ type SavedLayout = {
   nodes: CanvasLayoutNode[];
   edges: CanvasEdgeData[];
   viewport: CanvasViewport;
+};
+
+type CanvasDraft = SavedLayout & {
+  removedNodeIds?: string[];
+};
+
+const modelMetaKeys: Record<Capability, { providerId: string; modelId: string }> = {
+  text: { providerId: "textModelProviderId", modelId: "textModelId" },
+  image: { providerId: "imageModelProviderId", modelId: "imageModelId" },
+  video: { providerId: "videoModelProviderId", modelId: "videoModelId" },
 };
 
 const nodeTypes = { canvas: CanvasNode };
@@ -105,11 +122,111 @@ function isRoutableCanvasAction(action: CanvasActionKind): action is RoutableCan
   return routableCanvasActions.has(action);
 }
 
+function isManualNode(node: CanvasNodeData) {
+  return node.id.startsWith("manual:");
+}
+
+function canvasDraftKey(projectId: string) {
+  return `canvas-draft:${projectId}`;
+}
+
+function readCanvasDraft(projectId: string): CanvasDraft | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(canvasDraftKey(projectId));
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as CanvasDraft;
+    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges) || !parsed.viewport) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function layoutFromFlowState(
+  nodes: Node<FlowNodeData>[],
+  edges: Edge[],
+  viewport: CanvasViewport,
+  hiddenIds: Set<string>,
+): SavedLayout {
+  return {
+    nodes: [
+      ...nodes.map((node) => {
+        const data: CanvasNodeData = { ...node.data };
+        delete (data as Partial<FlowNodeData>).onAction;
+        return {
+          id: node.id,
+          position: node.position,
+          ...(isManualNode(node.data) && { data }),
+        };
+      }),
+      ...Array.from(hiddenIds).map((id) => ({
+        id,
+        position: { x: 0, y: 0 },
+        hidden: true,
+      })),
+    ],
+    edges: edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      label: typeof edge.label === "string" ? edge.label : undefined,
+    })),
+    viewport,
+  };
+}
+
+function nodeModelRef(node: CanvasNodeData, capability: Capability): ModelRef | null {
+  const keys = modelMetaKeys[capability];
+  const providerId = node.meta[keys.providerId];
+  const modelId = node.meta[keys.modelId];
+  if (typeof providerId !== "string" || typeof modelId !== "string") return null;
+  if (!providerId || !modelId) return null;
+  return { providerId, modelId };
+}
+
+function resolveModelRef(
+  providers: Provider[],
+  capability: Capability,
+  ref: ModelRef | null,
+): ModelConfig[Capability] | null {
+  if (!ref) return null;
+  const provider = providers.find((item) =>
+    item.id === ref.providerId && item.capability === capability
+  );
+  if (!provider) return null;
+  return {
+    protocol: provider.protocol,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey,
+    secretKey: provider.secretKey,
+    modelId: ref.modelId,
+  };
+}
+
+function actionModelCapabilities(action: CanvasActionKind): Capability[] {
+  if (action === "generate-frame" || action === "batch-frames") return ["image"];
+  if (action === "generate-video-prompt" || action === "batch-video-prompts") return ["text"];
+  if (action === "generate-video" || action === "batch-videos") return ["video"];
+  if (action === "assemble-video") return ["video"];
+  return [];
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+function fileSizeLabel(size: number) {
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
 function applyDefaultLayout(nodes: CanvasNodeData[]): CanvasLayoutNode[] {
   const columnByKind: Record<string, number> = {
-    project: 0,
-    text: 1,
-    episode: 1,
+    text: 0,
+    episode: 0,
     character: 2,
     shot: 3,
     asset: 4,
@@ -182,6 +299,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
   const loadingProject = useProjectStore((state) => state.loading);
   const fetchProject = useProjectStore((state) => state.fetchProject);
   const getModelConfig = useModelStore((state) => state.getModelConfig);
+  const providers = useModelStore((state) => state.providers);
   const imageGuard = useModelGuard("image");
   const textGuard = useModelGuard("text");
   const videoGuard = useModelGuard("video");
@@ -190,6 +308,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
   const [layoutLoading, setLayoutLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [creatingCanvas, setCreatingCanvas] = useState(false);
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [viewKind, setViewKind] = useState<CanvasViewKind>("flow");
@@ -202,11 +321,41 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     screen: { x: number; y: number };
     flow: { x: number; y: number };
   } | null>(null);
+  const [uploadTargetNodeId, setUploadTargetNodeId] = useState<string | null>(null);
+  const [removedNodeIds, setRemovedNodeIds] = useState<Set<string>>(() => new Set());
+  const [draftDirty, setDraftDirty] = useState(false);
   const instanceRef = useRef<ReactFlowInstance | null>(null);
   const flowWrapperRef = useRef<HTMLDivElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+
+  const markDraftDirty = useCallback(() => setDraftDirty(true), []);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    if (changes.some((change) => change.type !== "select" && change.type !== "dimensions")) {
+      markDraftDirty();
+    }
+    onNodesChange(changes);
+  }, [markDraftDirty, onNodesChange]);
+
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    if (changes.some((change) => change.type !== "select")) {
+      markDraftDirty();
+    }
+    onEdgesChange(changes);
+  }, [markDraftDirty, onEdgesChange]);
 
   useEffect(() => {
     if (!project || project.id !== projectId) {
@@ -222,7 +371,12 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
       try {
         const response = await apiFetch(`/api/projects/${projectId}/canvas`);
         const data = await response.json() as SavedLayout;
-        if (!cancelled) setLayout(data);
+        const draft = readCanvasDraft(projectId);
+        if (!cancelled) {
+          setLayout(draft ?? data);
+          setRemovedNodeIds(new Set(draft?.removedNodeIds ?? []));
+          setDraftDirty(false);
+        }
       } catch (error) {
         console.error(error);
         if (!cancelled) toast.error(t("layoutLoadFailed"));
@@ -254,6 +408,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
   }, [nodes, selectedNodeId]);
 
   const updateManualNodeContent = useCallback((nodeId: string, content: string) => {
+    markDraftDirty();
     setNodes((items) =>
       items.map((item) =>
         item.id === nodeId
@@ -272,27 +427,321 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
           : item,
       ),
     );
-  }, [setNodes, t]);
+  }, [markDraftDirty, setNodes, t]);
+
+  const updateManualNodeMeta = useCallback((
+    nodeId: string,
+    patch: Record<string, string | number | boolean | null>,
+  ) => {
+    markDraftDirty();
+    setNodes((items) =>
+      items.map((item) => {
+        if (item.id !== nodeId) return item;
+        const prompt = typeof patch.prompt === "string"
+          ? patch.prompt
+          : typeof item.data.meta.prompt === "string"
+            ? item.data.meta.prompt
+            : "";
+        return {
+          ...item,
+          data: {
+            ...item.data,
+            subtitle: prompt.trim() ? prompt.trim().slice(0, 72) : item.data.subtitle,
+            status: ["image", "video", "audio", "storyboard_script", "panorama_360"].includes(item.data.kind)
+              ? nodeStatusFromPrompt(prompt)
+              : item.data.status,
+            meta: {
+              ...item.data.meta,
+              ...patch,
+            },
+          },
+        };
+      }),
+    );
+  }, [markDraftDirty, setNodes]);
+
+  const updateNodeModelRef = useCallback((nodeId: string, capability: Capability, ref: ModelRef) => {
+    const keys = modelMetaKeys[capability];
+    markDraftDirty();
+    setNodes((items) =>
+      items.map((item) =>
+        item.id === nodeId
+          ? {
+              ...item,
+              data: {
+                ...item.data,
+                meta: {
+                  ...item.data.meta,
+                  [keys.providerId]: ref.providerId,
+                  [keys.modelId]: ref.modelId,
+                },
+              },
+            }
+          : item,
+      ),
+    );
+  }, [markDraftDirty, setNodes]);
+
+  const removeCanvasNode = useCallback((nodeId: string, confirmDelete = true) => {
+    const node = nodesRef.current.find((item) => item.id === nodeId);
+    if (!node) return false;
+
+    if (confirmDelete && !window.confirm(t("deleteCanvasNodeConfirm", { title: node.data.title }))) {
+      return false;
+    }
+
+    if (!isManualNode(node.data)) {
+      setRemovedNodeIds((items) => new Set(items).add(nodeId));
+    }
+    markDraftDirty();
+    setNodes((items) => items.filter((item) => item.id !== nodeId));
+    setEdges((items) => items.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+    setSelectedNodeId((current) => current === nodeId ? null : current);
+    toast.success(t("canvasNodeDeleted"));
+    return true;
+  }, [markDraftDirty, setEdges, setNodes, t]);
+
+  const modelConfigForNode = useCallback((node: CanvasNodeData, capabilities: Capability[]): ModelConfig => {
+    const config = getModelConfig();
+    return capabilities.reduce<ModelConfig>((current, capability) => {
+      const resolved = resolveModelRef(providers, capability, nodeModelRef(node, capability));
+      return resolved ? { ...current, [capability]: resolved } : current;
+    }, config);
+  }, [getModelConfig, providers]);
 
   const handleAction = useCallback(async (action: CanvasActionKind, node: CanvasNodeData) => {
-    if ((action === "generate-script" || action === "extract-characters") && node.kind === "text") {
-      const content = String(node.meta.content ?? "").trim();
+    if (action === "delete-node") {
+      removeCanvasNode(node.id);
+      return;
+    }
+
+    if (action === "upload-file") {
+      setUploadTargetNodeId(node.id);
+      window.requestAnimationFrame(() => uploadInputRef.current?.click());
+      return;
+    }
+
+    if (action === "generate-audio") {
+      toast.error(t("audioGenerationUnavailable"));
+      return;
+    }
+
+    if (action === "plan-3d-scene" || action === "compose-assets") {
+      markDraftDirty();
+      setNodes((items) =>
+        items.map((item) =>
+          item.id === node.id
+            ? {
+                ...item,
+                data: {
+                  ...item.data,
+                  status: "completed",
+                  subtitle: t(action === "plan-3d-scene" ? "directorPanelReady" : "compositionPanelReady"),
+                  meta: {
+                    ...item.data.meta,
+                    updatedAt: new Date().toISOString(),
+                  },
+                },
+              }
+            : item,
+        ),
+      );
+      toast.success(t("panelUpdated"));
+      return;
+    }
+
+    if (action === "generate-image" || action === "generate-panorama") {
+      const prompt = String(node.meta.prompt ?? "").trim();
+      if (!prompt) {
+        toast.error(t("promptRequired"));
+        return;
+      }
+      if (!imageGuard(nodeModelRef(node, "image"))) return;
+
+      setRunningAction(`${action}:${node.id}`);
+      try {
+        const response = await apiFetch(`/api/projects/${projectId}/canvas/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: action === "generate-panorama" ? "panorama_360" : "image",
+            prompt,
+            ratio,
+            modelConfig: modelConfigForNode(node, ["image"]),
+          }),
+        });
+        const data = await response.json() as { url?: string; filePath?: string; error?: string };
+        if (!response.ok) throw new Error(data.error ?? t("actionFailed"));
+        markDraftDirty();
+        setNodes((items) =>
+          items.map((item) =>
+            item.id === node.id
+              ? {
+                  ...item,
+                  data: {
+                    ...item.data,
+                    status: "completed",
+                    previewUrl: data.url ?? null,
+                    subtitle: prompt.slice(0, 72),
+                    meta: {
+                      ...item.data.meta,
+                      prompt,
+                      filePath: data.filePath ?? null,
+                      url: data.url ?? null,
+                    },
+                  },
+                }
+              : item,
+          ),
+        );
+        toast.success(t("generationCompleted"));
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : t("actionFailed"));
+      } finally {
+        setRunningAction(null);
+      }
+      return;
+    }
+
+    if (action === "generate-video" && node.kind === "video" && isManualNode(node)) {
+      const prompt = String(node.meta.prompt ?? "").trim();
+      if (!prompt) {
+        toast.error(t("promptRequired"));
+        return;
+      }
+      if (!videoGuard(nodeModelRef(node, "video"))) return;
+
+      const incomingImageEdge = edgesRef.current.find((edge) => edge.target === node.id);
+      const referenceImageNode = incomingImageEdge
+        ? nodesRef.current.find((item) => item.id === incomingImageEdge.source && item.data.kind === "image")?.data
+        : null;
+      const referenceImagePath = String(
+        node.meta.referenceImagePath ??
+          referenceImageNode?.meta.filePath ??
+          "",
+      );
+      if (!referenceImagePath) {
+        toast.error(t("videoReferenceRequired"));
+        return;
+      }
+
+      setRunningAction(`${action}:${node.id}`);
+      try {
+        const response = await apiFetch(`/api/projects/${projectId}/canvas/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind: "video",
+            prompt,
+            ratio,
+            duration: Number(node.meta.duration ?? 5),
+            referenceImagePath,
+            modelConfig: modelConfigForNode(node, ["video"]),
+          }),
+        });
+        const data = await response.json() as { url?: string; filePath?: string; error?: string };
+        if (!response.ok) throw new Error(data.error ?? t("actionFailed"));
+        markDraftDirty();
+        setNodes((items) =>
+          items.map((item) =>
+            item.id === node.id
+              ? {
+                  ...item,
+                  data: {
+                    ...item.data,
+                    status: "completed",
+                    previewUrl: data.url ?? null,
+                    subtitle: prompt.slice(0, 72),
+                    meta: {
+                      ...item.data.meta,
+                      prompt,
+                      filePath: data.filePath ?? null,
+                      url: data.url ?? null,
+                      referenceImagePath,
+                    },
+                  },
+                }
+              : item,
+          ),
+        );
+        toast.success(t("generationCompleted"));
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : t("actionFailed"));
+      } finally {
+        setRunningAction(null);
+      }
+      return;
+    }
+
+    if (action === "generate-storyboard") {
+      const content = String(node.meta.content ?? node.meta.prompt ?? "").trim();
       if (!content) {
         toast.error(t("textNodeContentRequired"));
         return;
       }
-      if (!textGuard()) return;
+      if (!textGuard(nodeModelRef(node, "text"))) return;
 
       setRunningAction(`${action}:${node.id}`);
       try {
-        if (action === "generate-script") {
+        await apiFetch(`/api/projects/${projectId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ script: content }),
+        });
+        const response = await apiFetch(`/api/projects/${projectId}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "shot_split",
+            modelConfig: modelConfigForNode(node, ["text"]),
+          }),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => null);
+          throw new Error(error?.error ?? t("actionFailed"));
+        }
+        toast.success(t("storyboardQueued"));
+        await fetchProject(projectId);
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : t("actionFailed"));
+      } finally {
+        setRunningAction(null);
+      }
+      return;
+    }
+
+    if (
+      action === "import-novel" ||
+      ((action === "generate-script" || action === "extract-characters") &&
+        (node.kind === "text" || node.kind === "file"))
+    ) {
+      const content = String(node.meta.content ?? node.meta.prompt ?? "").trim();
+      if (!content) {
+        toast.error(t("textNodeContentRequired"));
+        return;
+      }
+      if (!textGuard(nodeModelRef(node, "text"))) return;
+
+      setRunningAction(`${action}:${node.id}`);
+      try {
+        if (action === "import-novel") {
+          await apiFetch(`/api/projects/${projectId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ script: content }),
+          });
+          toast.success(t("novelImported"));
+        } else if (action === "generate-script") {
           const response = await apiFetch(`/api/projects/${projectId}/generate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               action: "script_generate",
               payload: { idea: content },
-              modelConfig: getModelConfig(),
+              modelConfig: modelConfigForNode(node, ["text"]),
             }),
           });
           if (!response.ok) {
@@ -312,7 +761,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               action: "character_extract",
-              modelConfig: getModelConfig(),
+              modelConfig: modelConfigForNode(node, ["text"]),
             }),
           });
           if (!response.ok) {
@@ -344,13 +793,13 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     }
 
     if (action === "generate-frame" || action === "batch-frames") {
-      if (!imageGuard()) return;
+      if (!imageGuard(nodeModelRef(node, "image"))) return;
     }
     if (action === "generate-video-prompt" || action === "batch-video-prompts") {
-      if (!textGuard()) return;
+      if (!textGuard(nodeModelRef(node, "text"))) return;
     }
     if (action === "generate-video" || action === "batch-videos") {
-      if (!videoGuard()) return;
+      if (!videoGuard(nodeModelRef(node, "video"))) return;
     }
 
     if (!project) return;
@@ -371,7 +820,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
       ratio,
       overwrite,
       generationMode: project.generationMode,
-      modelConfig: getModelConfig(),
+      modelConfig: modelConfigForNode(node, actionModelCapabilities(action)),
     });
 
     setRunningAction(`${action}:${node.id}`);
@@ -391,22 +840,40 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     }
   }, [
     fetchProject,
-    getModelConfig,
     imageGuard,
     locale,
+    markDraftDirty,
+    modelConfigForNode,
     overwrite,
     project,
     projectId,
     ratio,
     router,
+    setNodes,
+    removeCanvasNode,
     t,
     textGuard,
     videoGuard,
   ]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (isEditableTarget(event.target)) return;
+      if (!selectedNodeId) return;
+
+      const deleted = removeCanvasNode(selectedNodeId);
+      if (deleted) event.preventDefault();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [removeCanvasNode, selectedNodeId]);
+
   const createManualNode = useCallback((kind: CanvasNodeKind, position: { x: number; y: number }) => {
     const id = `manual:${kind}:${Date.now()}`;
     const content = kind === "text" ? "" : undefined;
+    const prompt = ["image", "video", "audio", "storyboard_script", "panorama_360"].includes(kind) ? "" : undefined;
     const data: FlowNodeData = {
       id,
       kind,
@@ -415,14 +882,16 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
       subtitle: kind === "text" ? t("textNodeEmpty") : t("manualNodeDraft"),
       status: "idle",
       previewUrl: null,
-      actions: kind === "text" ? ["generate-script", "extract-characters"] : [],
+      actions: canvasActionsForManualKind(kind),
       meta: {
         source: "manual",
         ...(content !== undefined && { content }),
+        ...(prompt !== undefined && { prompt }),
       },
       onAction: handleAction,
     };
 
+    markDraftDirty();
     setNodes((items) => [
       ...items.map((item) => ({ ...item, selected: false })),
       {
@@ -435,7 +904,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     ]);
     setSelectedNodeId(id);
     setAddMenu(null);
-  }, [handleAction, setNodes, t]);
+  }, [handleAction, markDraftDirty, setNodes, t]);
 
   useEffect(() => {
     if (!graph) return;
@@ -484,8 +953,32 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     );
   }, [graph, kindFilter, nodes, search, setEdges, setNodes, statusFilter, viewKind]);
 
+  useEffect(() => {
+    if (!graph || !draftDirty) return;
+    const hiddenIds = new Set([
+      ...(layout?.nodes ?? []).filter((node) => node.hidden).map((node) => node.id),
+      ...Array.from(removedNodeIds),
+    ]);
+    const draft = layoutFromFlowState(
+      nodesRef.current,
+      edgesRef.current,
+      instanceRef.current?.getViewport() ?? graph.viewport,
+      hiddenIds,
+    );
+
+    try {
+      window.localStorage.setItem(
+        canvasDraftKey(projectId),
+        JSON.stringify({ ...draft, removedNodeIds: Array.from(removedNodeIds) }),
+      );
+    } catch (error) {
+      console.warn("[canvas] Failed to save local draft", error);
+    }
+  }, [draftDirty, edges, graph, layout?.nodes, nodes, projectId, removedNodeIds]);
+
   const handleConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
+    markDraftDirty();
     setEdges((items) =>
       addEdge(
         {
@@ -499,7 +992,7 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
         items,
       ),
     );
-  }, [setEdges]);
+  }, [markDraftDirty, setEdges]);
 
   const handleCanvasDoubleClick = useCallback((event: ReactMouseEvent<Element>) => {
     const target = event.target;
@@ -540,36 +1033,112 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     }
   }, [nodes, setNodes]);
 
+  async function handleNodeFileUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !uploadTargetNodeId) return;
+
+    const targetId = uploadTargetNodeId;
+    setUploadTargetNodeId(null);
+    const inferredKind = canvasKindFromUploadedFile(file);
+    setRunningAction(`upload-file:${targetId}`);
+
+    try {
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+      const uploadResponse = await apiFetch(`/api/projects/${projectId}/canvas/upload`, {
+        method: "POST",
+        body: uploadForm,
+      });
+      const uploadData = await uploadResponse.json() as {
+        name: string;
+        type: string;
+        size: number;
+        kind: CanvasNodeKind;
+        filePath?: string;
+        url?: string;
+        error?: string;
+      };
+      if (!uploadResponse.ok) throw new Error(uploadData.error ?? t("uploadFailed"));
+
+      let content = "";
+      let charCount = 0;
+      if (inferredKind === "text") {
+        const parseForm = new FormData();
+        parseForm.append("file", file);
+        const parseResponse = await apiFetch(`/api/projects/${projectId}/import/parse`, {
+          method: "POST",
+          body: parseForm,
+        });
+        const parseData = await parseResponse.json() as { text?: string; charCount?: number; error?: string };
+        if (!parseResponse.ok) throw new Error(parseData.error ?? t("uploadFailed"));
+        content = parseData.text ?? "";
+        charCount = parseData.charCount ?? content.length;
+      }
+
+      const nextKind = uploadData.kind;
+      markDraftDirty();
+      setNodes((items) =>
+        items.map((item) => {
+          if (item.id !== targetId) return item;
+          return {
+            ...item,
+            data: {
+              ...item.data,
+              kind: nextKind,
+              title: uploadData.name,
+              subtitle: nextKind === "text" ? `${charCount} 字` : fileSizeLabel(uploadData.size),
+              status: nextKind === "text" || uploadData.url ? "ready" : "idle",
+              previewUrl: ["image", "video", "audio"].includes(nextKind) ? uploadData.url ?? null : item.data.previewUrl,
+              actions: nextKind === "text"
+                ? ["generate-script", "extract-characters", "delete-node"]
+                : canvasActionsForManualKind(nextKind),
+              meta: {
+                ...item.data.meta,
+                fileName: uploadData.name,
+                fileType: uploadData.type || file.type,
+                fileSize: uploadData.size,
+                filePath: uploadData.filePath ?? null,
+                url: uploadData.url ?? null,
+                ...(content && { content }),
+              },
+            },
+          };
+        }),
+      );
+      toast.success(t(nextKind === "text" ? "novelFileImported" : "fileImported"));
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : t("uploadFailed"));
+    } finally {
+      setRunningAction(null);
+    }
+  }
+
   async function handleSave() {
     if (!project) return;
     setSaving(true);
     try {
-      const payload = {
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          position: node.position,
-          ...(node.id.startsWith("manual:") && {
-            data: {
-              ...node.data,
-              onAction: undefined,
-            },
-          }),
-        })),
-        edges: edges.map((edge) => ({
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          label: typeof edge.label === "string" ? edge.label : undefined,
-        })),
-        viewport: instanceRef.current?.getViewport() ?? { x: 0, y: 0, zoom: 1 },
-      };
+      const hiddenIds = new Set([
+        ...(layout?.nodes ?? []).filter((node) => node.hidden).map((node) => node.id),
+        ...Array.from(removedNodeIds),
+      ]);
+      const payload = layoutFromFlowState(
+        nodes,
+        edges,
+        instanceRef.current?.getViewport() ?? { x: 0, y: 0, zoom: 1 },
+        hiddenIds,
+      );
       const response = await apiFetch(`/api/projects/${project.id}/canvas`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const saved = await response.json() as SavedLayout;
+      setRemovedNodeIds(new Set());
       setLayout(saved);
+      setDraftDirty(false);
+      window.localStorage.removeItem(canvasDraftKey(project.id));
       toast.success(t("layoutSaved"));
     } catch (error) {
       console.error(error);
@@ -592,10 +1161,37 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
     }
   }
 
+  async function handleCreateCanvas() {
+    if (!project) return;
+    const title = window.prompt(t("newCanvasNamePrompt"), `${project.title} 2`);
+    const trimmed = title?.trim();
+    if (!trimmed) return;
+
+    setCreatingCanvas(true);
+    try {
+      const response = await apiFetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      const created = await response.json() as { id?: string; title?: string; error?: string };
+      if (!response.ok || !created.id) {
+        throw new Error(created.error ?? t("createCanvasFailed"));
+      }
+      router.push(`/${locale}/project/${created.id}/canvas`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : t("createCanvasFailed"));
+    } finally {
+      setCreatingCanvas(false);
+    }
+  }
+
   function handleAutoLayout() {
     if (!graph) return;
     const nextLayout = applyDefaultLayout(graph.nodes);
     const nextById = new Map(nextLayout.map((item) => [item.id, item.position]));
+    markDraftDirty();
     setNodes((items) =>
       items.map((node) => ({
         ...node,
@@ -637,6 +1233,8 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
           overwrite={overwrite}
           saving={saving}
           refreshing={refreshing}
+          creatingCanvas={creatingCanvas}
+          canvasTitle={project.title}
           onViewKindChange={setViewKind}
           onKindFilterChange={setKindFilter}
           onStatusFilterChange={setStatusFilter}
@@ -645,8 +1243,16 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
           onAutoLayout={handleAutoLayout}
           onRefresh={handleRefresh}
           onSave={handleSave}
+          onCreateCanvas={handleCreateCanvas}
         />
         <div ref={flowWrapperRef} className="relative min-h-0 flex-1">
+          <input
+            ref={uploadInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleNodeFileUpload}
+            accept=".txt,.md,.markdown,.docx,.pdf,image/*,video/*,audio/*"
+          />
           {runningAction && (
             <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-lg border border-[--border-subtle] bg-white px-3 py-2 text-xs text-[--text-secondary] shadow-sm">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
@@ -657,14 +1263,15 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={handleConnect}
             onPaneClick={handlePaneClick}
             onInit={(instance) => {
               instanceRef.current = instance;
             }}
             onNodeClick={(_, node: Node<FlowNodeData>) => setSelectedNodeId(node.id)}
+            deleteKeyCode={null}
             fitView
             proOptions={{ hideAttribution: true }}
             className="bg-[--surface]"
@@ -727,6 +1334,8 @@ export function CanvasWorkspace({ projectId }: { projectId: string }) {
         node={selectedNode}
         onAction={handleAction}
         onNodeContentChange={updateManualNodeContent}
+        onNodeMetaChange={updateManualNodeMeta}
+        onNodeModelChange={updateNodeModelRef}
       />
     </div>
   );

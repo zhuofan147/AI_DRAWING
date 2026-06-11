@@ -26,16 +26,25 @@ export type CanvasNodeStatus =
 
 export type CanvasActionKind =
   | "open"
+  | "upload-file"
+  | "import-novel"
   | "generate-script"
   | "extract-characters"
+  | "generate-image"
   | "generate-frame"
   | "generate-video-prompt"
   | "generate-video"
+  | "generate-audio"
+  | "generate-storyboard"
+  | "plan-3d-scene"
+  | "generate-panorama"
+  | "compose-assets"
   | "batch-frames"
   | "batch-video-prompts"
   | "batch-videos"
   | "assemble-video"
-  | "download";
+  | "download"
+  | "delete-node";
 
 export interface CanvasNodeData {
   id: string;
@@ -62,6 +71,7 @@ export interface CanvasLayoutNode {
   id: string;
   position: { x: number; y: number };
   collapsed?: boolean;
+  hidden?: boolean;
   data?: CanvasNodeData;
 }
 

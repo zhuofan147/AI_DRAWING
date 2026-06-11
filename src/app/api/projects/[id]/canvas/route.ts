@@ -67,16 +67,25 @@ const allowedStatuses = new Set<CanvasNodeStatus>([
 
 const allowedActions = new Set<CanvasActionKind>([
   "open",
+  "upload-file",
+  "import-novel",
   "generate-script",
   "extract-characters",
+  "generate-image",
   "generate-frame",
   "generate-video-prompt",
   "generate-video",
+  "generate-audio",
+  "generate-storyboard",
+  "plan-3d-scene",
+  "generate-panorama",
+  "compose-assets",
   "batch-frames",
   "batch-video-prompts",
   "batch-videos",
   "assemble-video",
   "download",
+  "delete-node",
 ]);
 
 function sanitizeManualNodeData(value: unknown, fallbackId: string): CanvasNodeData | undefined {
@@ -138,6 +147,7 @@ export function sanitizeCanvasLayoutPayload(input: unknown): LayoutPayload {
           y: finiteNumber(position.y, 0),
         },
         ...(typeof node.collapsed === "boolean" && { collapsed: node.collapsed }),
+        ...(typeof node.hidden === "boolean" && { hidden: node.hidden }),
         ...(data && { data }),
       }];
     }),

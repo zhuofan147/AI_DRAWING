@@ -5,6 +5,7 @@ import { eq, and, max } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog } from "@/lib/import-utils";
+import { scriptFromImportedEpisode } from "@/lib/import/episodes";
 
 export const maxDuration = 60;
 
@@ -129,6 +130,7 @@ export async function POST(
         description: ep.description || "",
         keywords: ep.keywords || "",
         idea: ep.idea || "",
+        script: scriptFromImportedEpisode(ep),
         sequence: seq++,
       })
       .returning();

@@ -11,7 +11,9 @@ import {
   Eye,
   Filter,
   LayoutGrid,
+  Loader2,
   ListVideo,
+  Plus,
   RefreshCw,
   Route,
   Save,
@@ -43,6 +45,8 @@ interface CanvasToolbarProps {
   overwrite: boolean;
   saving: boolean;
   refreshing: boolean;
+  creatingCanvas: boolean;
+  canvasTitle: string;
   onViewKindChange: (value: CanvasViewKind) => void;
   onKindFilterChange: (value: CanvasKindFilter) => void;
   onStatusFilterChange: (value: CanvasStatusFilter) => void;
@@ -51,11 +55,11 @@ interface CanvasToolbarProps {
   onAutoLayout: () => void;
   onRefresh: () => void;
   onSave: () => void;
+  onCreateCanvas: () => void;
 }
 
 const kindOptions: CanvasKindFilter[] = [
   "all",
-  "project",
   "episode",
   "character",
   "shot",
@@ -267,6 +271,8 @@ export function CanvasToolbar({
   overwrite,
   saving,
   refreshing,
+  creatingCanvas,
+  canvasTitle,
   onViewKindChange,
   onKindFilterChange,
   onStatusFilterChange,
@@ -275,6 +281,7 @@ export function CanvasToolbar({
   onAutoLayout,
   onRefresh,
   onSave,
+  onCreateCanvas,
 }: CanvasToolbarProps) {
   const t = useTranslations("project.canvas");
   const viewItems = canvasViewKinds.map((view) => ({
@@ -302,7 +309,7 @@ export function CanvasToolbar({
           <SlidersHorizontal className="h-4 w-4" />
         </div>
         <div className="hidden sm:block">
-          <p className="text-sm font-semibold text-[--text-primary]">{t("title")}</p>
+          <p className="max-w-[220px] truncate text-sm font-semibold text-[--text-primary]">{canvasTitle}</p>
           <p className="text-xs text-[--text-muted]">{t("subtitle")}</p>
         </div>
       </div>
@@ -352,6 +359,10 @@ export function CanvasToolbar({
       </label>
 
       <div className="ml-auto flex items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={onCreateCanvas} disabled={creatingCanvas}>
+          {creatingCanvas ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          <span className="hidden md:inline">{t("newCanvas")}</span>
+        </Button>
         <Button variant="ghost" size="sm" onClick={onAutoLayout}>
           <LayoutGrid className="h-4 w-4" />
           <span className="hidden md:inline">{t("autoLayout")}</span>

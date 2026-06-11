@@ -8,14 +8,17 @@ import {
   Download,
   ExternalLink,
   Film,
+  Globe2,
   ImageIcon,
   Layers,
   Music,
   NotebookText,
   Play,
   Sparkles,
+  Upload,
   UserRound,
   Wand2,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CanvasActionKind, CanvasNodeData, CanvasNodeKind } from "@/lib/canvas/types";
@@ -36,21 +39,29 @@ const kindIcons: Record<CanvasNodeKind, typeof Box> = {
   audio: Music,
   note: NotebookText,
   storyboard_script: NotebookText,
-  director_3d: Box,
-  panorama_360: Box,
+  director_3d: Globe2,
+  panorama_360: Globe2,
   composition: Layers,
-  file: Box,
+  file: Upload,
   action: Wand2,
   export: Download,
 };
 
 const actionIcons: Partial<Record<CanvasActionKind, typeof Box>> = {
   open: ExternalLink,
+  "upload-file": Upload,
+  "import-novel": NotebookText,
   "generate-script": NotebookText,
   "extract-characters": UserRound,
+  "generate-image": ImageIcon,
   "generate-frame": ImageIcon,
   "generate-video-prompt": Sparkles,
   "generate-video": Play,
+  "generate-audio": Music,
+  "generate-storyboard": NotebookText,
+  "plan-3d-scene": Globe2,
+  "generate-panorama": Globe2,
+  "compose-assets": Layers,
   "batch-frames": ImageIcon,
   "batch-video-prompts": Sparkles,
   "batch-videos": Play,
@@ -77,16 +88,30 @@ export const CanvasNode = memo(function CanvasNode({
   const t = useTranslations("project.canvas");
   const Icon = kindIcons[data.kind];
   const hasImagePreview = data.previewUrl && !mediaLooksLikeVideo(data.previewUrl);
+  const canDelete = data.actions.includes("delete-node");
 
   return (
     <div
       className={cn(
-        "w-[250px] overflow-hidden rounded-lg border bg-white text-left shadow-sm transition-all",
+        "relative w-[250px] overflow-hidden rounded-lg border bg-white text-left shadow-sm transition-all",
         selected
           ? "border-primary shadow-lg shadow-primary/15"
           : "border-[--border-subtle] hover:border-[--border-hover] hover:shadow-md",
       )}
     >
+      {canDelete && (
+        <button
+          type="button"
+          title={t("actions.delete-node")}
+          className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-white shadow-md shadow-destructive/25 transition-transform hover:scale-105 hover:bg-destructive/90"
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onAction?.("delete-node", data);
+          }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
       <Handle
         type="target"
         position={Position.Left}
@@ -131,7 +156,7 @@ export const CanvasNode = memo(function CanvasNode({
       </div>
 
       <div className="flex h-11 items-center gap-1 border-t border-[--border-subtle] px-2">
-        {data.actions.slice(0, 5).map((action) => {
+        {data.actions.filter((action) => action !== "delete-node").slice(0, 5).map((action) => {
           const ActionIcon = actionIcons[action] ?? Wand2;
           return (
             <button

@@ -20,11 +20,16 @@ export const canvasViewKinds: CanvasViewKind[] = [
 ];
 
 const generationActions = new Set<CanvasActionKind>([
+  "import-novel",
   "generate-script",
   "extract-characters",
+  "generate-image",
   "generate-frame",
   "generate-video-prompt",
   "generate-video",
+  "generate-audio",
+  "generate-storyboard",
+  "generate-panorama",
   "batch-frames",
   "batch-video-prompts",
   "batch-videos",

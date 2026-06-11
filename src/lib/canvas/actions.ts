@@ -12,9 +12,15 @@ type GenerateAction =
   | "batch_reference_video"
   | "video_assemble";
 
-type RoutableCanvasAction = Exclude<
+type RoutableCanvasAction = Extract<
   CanvasActionKind,
-  "open" | "download" | "generate-script" | "extract-characters"
+  | "generate-frame"
+  | "generate-video-prompt"
+  | "generate-video"
+  | "batch-frames"
+  | "batch-video-prompts"
+  | "batch-videos"
+  | "assemble-video"
 >;
 
 export type CanvasGenerateInput = {

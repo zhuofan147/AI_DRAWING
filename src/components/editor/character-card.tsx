@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,23 @@ export function CharacterCard({
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const imageGuard = useModelGuard("image");
   const isGenerating = generating || (!!batchGenerating && !referenceImage);
+  const referenceHistory = useMemo(() => {
+    const parsed: string[] = [];
+    try {
+      const history = JSON.parse(referenceImageHistory || "[]") as unknown;
+      if (Array.isArray(history)) {
+        for (const item of history) {
+          if (typeof item === "string" && item.trim()) parsed.push(item);
+        }
+      }
+    } catch {}
+    if (referenceImage && !parsed.includes(referenceImage)) {
+      parsed.unshift(referenceImage);
+    }
+    return Array.from(new Set(parsed));
+  }, [referenceImage, referenceImageHistory]);
+  const currentReferenceIndex = referenceImage ? referenceHistory.indexOf(referenceImage) : -1;
+  const showReferenceHistory = referenceHistory.length > 1;
 
   function resolveImageRef(ref: ModelRef | null) {
     if (!ref) return null;
@@ -131,10 +148,19 @@ export function CharacterCard({
     setUploading(false);
   }
 
+  async function switchReferenceImage(newPath: string) {
+    await apiFetch(`/api/projects/${projectId}/characters/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ referenceImage: newPath }),
+    });
+    onUpdate();
+  }
+
   return (
     <div className="group overflow-hidden rounded-2xl border border-[--border-subtle] bg-white transition-all duration-300 hover:border-[--border-hover] hover:shadow-lg hover:shadow-black/5">
       {/* Avatar area */}
-      <div className="relative flex items-center justify-center bg-gradient-to-b from-[--surface] to-white p-8">
+      <div className="relative flex flex-col items-center justify-center gap-3 bg-gradient-to-b from-[--surface] to-white p-8">
         {onDelete && (
           <button
             onClick={onDelete}
@@ -144,57 +170,78 @@ export function CharacterCard({
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}
-        {referenceImage ? (() => {
-          let history: string[] = [];
-          try { history = JSON.parse(referenceImageHistory || "[]"); } catch {}
-          if (history.length === 0 && referenceImage) history = [referenceImage];
-          const currentIdx = history.indexOf(referenceImage);
-          const showArrows = history.length > 1;
-          async function switchTo(newPath: string) {
-            await apiFetch(`/api/projects/${projectId}/characters/${id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ referenceImage: newPath }),
-            });
-            onUpdate();
-          }
-          return (
+        {referenceImage ? (
+          <>
             <div className="relative w-full aspect-video overflow-hidden rounded-xl cursor-pointer group" onClick={() => setLightbox(true)}>
               <img
                 src={uploadUrl(referenceImage)}
                 alt={name}
                 className="w-full h-full object-cover"
               />
-              {showArrows && (
+              {showReferenceHistory && currentReferenceIndex >= 0 && (
                 <>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const next = (currentIdx - 1 + history.length) % history.length;
-                      switchTo(history[next]);
+                      const next = (currentReferenceIndex - 1 + referenceHistory.length) % referenceHistory.length;
+                      switchReferenceImage(referenceHistory[next]);
                     }}
                     className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"
+                    title={t("character.previousReference")}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const next = (currentIdx + 1) % history.length;
-                      switchTo(history[next]);
+                      const next = (currentReferenceIndex + 1) % referenceHistory.length;
+                      switchReferenceImage(referenceHistory[next]);
                     }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70"
+                    title={t("character.nextReference")}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </button>
                   <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-black/60 px-2 py-0.5 text-[10px] text-white">
-                    {currentIdx + 1}/{history.length}
+                    {currentReferenceIndex + 1}/{referenceHistory.length}
                   </span>
                 </>
               )}
             </div>
-          );
-        })() : isGenerating ? (
+            {showReferenceHistory && (
+              <div className="w-full">
+                <div className="mb-1 flex items-center justify-between text-[10px] font-medium text-[--text-muted]">
+                  <span>{t("character.assetLibrary")}</span>
+                  <span>{referenceHistory.length}</span>
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {referenceHistory.map((path, idx) => {
+                    const active = path === referenceImage;
+                    return (
+                      <button
+                        key={`${path}-${idx}`}
+                        type="button"
+                        onClick={() => switchReferenceImage(path)}
+                        className={`h-10 w-14 shrink-0 overflow-hidden rounded-lg border transition-all ${
+                          active
+                            ? "border-primary ring-2 ring-primary/20"
+                            : "border-white/80 opacity-70 hover:opacity-100"
+                        }`}
+                        title={active ? t("character.activeReference") : t("character.useAsReference")}
+                      >
+                        <img
+                          src={uploadUrl(path)}
+                          alt={`${name} ${idx + 1}`}
+                          className="h-full w-full object-cover"
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        ) : isGenerating ? (
           <div className="w-full aspect-video rounded-xl animate-shimmer" />
         ) : (
           <div className="flex w-full aspect-video items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-accent/10 text-3xl font-bold text-primary">

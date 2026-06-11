@@ -1,4 +1,5 @@
 import type {
+  CanvasActionKind,
   CanvasEdgeData,
   CanvasGraph,
   CanvasLayoutNode,
@@ -73,6 +74,17 @@ function activeAssets(shot: Shot): ShotAsset[] {
   return (shot.assets ?? []).filter((asset) => asset.isActive === 1);
 }
 
+function removableActions(actions: CanvasActionKind[]): CanvasActionKind[] {
+  return actions.includes("delete-node") ? actions : [...actions, "delete-node"];
+}
+
+function normalizeSavedNode(node: CanvasNodeData): CanvasNodeData {
+  return {
+    ...node,
+    actions: removableActions(node.actions),
+  };
+}
+
 export function buildCanvasGraph(
   project: CanvasProjectInput,
   savedLayout: {
@@ -83,20 +95,7 @@ export function buildCanvasGraph(
 ): CanvasGraph {
   const nodes: CanvasNodeData[] = [];
   const edges: CanvasEdgeData[] = [];
-  const projectNodeId = nodeId("project", project.id);
-
-  nodes.push({
-    id: projectNodeId,
-    kind: "project",
-    entityId: project.id,
-    title: project.title,
-    subtitle: `${project.episodes?.length ?? 0} episodes`,
-    status: statusFromGenerationState(project.status),
-    href: `/project/${project.id}/episodes`,
-    previewUrl: project.finalVideoUrl ?? null,
-    actions: ["open"],
-    meta: { finalVideo: Boolean(project.finalVideoUrl) },
-  });
+  const hiddenIds = new Set((savedLayout.nodes ?? []).filter((item) => item.hidden).map((item) => item.id));
 
   for (const episode of project.episodes ?? []) {
     const id = nodeId("episode", episode.id);
@@ -115,10 +114,9 @@ export function buildCanvasGraph(
       }),
       href: `/project/${project.id}/episodes/${episode.id}/storyboard`,
       previewUrl: episode.finalVideoUrl ?? null,
-      actions: ["open", "batch-frames", "batch-video-prompts", "batch-videos", "assemble-video"],
+      actions: removableActions(["open", "batch-frames", "batch-video-prompts", "batch-videos", "assemble-video"]),
       meta: { sequence: episode.sequence },
     });
-    edges.push(edge(projectNodeId, id, "episode"));
   }
 
   for (const character of project.characters ?? []) {
@@ -136,10 +134,9 @@ export function buildCanvasGraph(
       }),
       href: `/project/${project.id}/characters`,
       previewUrl: character.referenceImage ?? null,
-      actions: ["open"],
+      actions: removableActions(["open"]),
       meta: { scope: character.scope ?? "main" },
     });
-    edges.push(edge(projectNodeId, id, "character"));
     if (character.episodeId) {
       edges.push(edge(nodeId("episode", character.episodeId), id, "uses"));
     }
@@ -168,7 +165,7 @@ export function buildCanvasGraph(
         ? `/project/${project.id}/episodes/${shot.episodeId}/storyboard?shotId=${shot.id}`
         : `/project/${project.id}/storyboard?shotId=${shot.id}`,
       previewUrl: shotAssets.find((asset) => asset.fileUrl)?.fileUrl ?? null,
-      actions: ["open", "generate-frame", "generate-video-prompt", "generate-video"],
+      actions: removableActions(["open", "generate-frame", "generate-video-prompt", "generate-video"]),
       meta: {
         sequence: shot.sequence,
         hasFrame,
@@ -176,7 +173,9 @@ export function buildCanvasGraph(
         hasVideoPrompt: Boolean(shot.videoPrompt),
       },
     });
-    edges.push(edge(shot.episodeId ? nodeId("episode", shot.episodeId) : projectNodeId, id, "shot"));
+    if (shot.episodeId) {
+      edges.push(edge(nodeId("episode", shot.episodeId), id, "shot"));
+    }
 
     for (const asset of shotAssets) {
       const assetNodeId = nodeId("asset", asset.id);
@@ -189,7 +188,7 @@ export function buildCanvasGraph(
         subtitle: asset.status,
         status: statusFromGenerationState(asset.status),
         previewUrl: asset.fileUrl,
-        actions: asset.fileUrl ? ["open"] : [],
+        actions: removableActions(asset.fileUrl ? ["open"] : []),
         meta: { type: asset.type },
       });
       edges.push(edge(id, assetNodeId, "asset"));
@@ -198,8 +197,9 @@ export function buildCanvasGraph(
 
   for (const item of savedLayout.nodes ?? []) {
     if (!item.data) continue;
+    if (item.hidden) continue;
     if (nodes.some((node) => node.id === item.data?.id)) continue;
-    nodes.push(item.data);
+    nodes.push(normalizeSavedNode(item.data));
   }
 
   if (project.finalVideoUrl) {
@@ -213,16 +213,19 @@ export function buildCanvasGraph(
       status: "completed",
       href: `/api/projects/${project.id}/download`,
       previewUrl: project.finalVideoUrl,
-      actions: ["download"],
+      actions: removableActions(["download"]),
       meta: {},
     });
-    edges.push(edge(projectNodeId, exportNodeId, "export"));
   }
 
   return {
-    nodes,
-    edges: mergeEdges(nodes, edges, savedLayout.edges ?? []),
-    layoutNodes: mergeLayout(nodes, savedLayout.nodes ?? []),
+    nodes: nodes.filter((node) => !hiddenIds.has(node.id)),
+    edges: mergeEdges(
+      nodes.filter((node) => !hiddenIds.has(node.id)),
+      edges,
+      savedLayout.edges ?? [],
+    ),
+    layoutNodes: mergeLayout(nodes.filter((node) => !hiddenIds.has(node.id)), savedLayout.nodes ?? []),
     viewport: savedLayout.viewport ?? defaultViewport,
   };
 }
